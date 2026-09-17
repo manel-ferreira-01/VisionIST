@@ -195,22 +195,35 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
     def _watchdog_loop(self):
         while True:
             time.sleep(10)  # check every 10s
-            # A session holding a live tracker MUST not have the GPU snatched:
-            # .to() resets ultralytics' cached predictor, and the next
-            # track() would build a fresh tracker -> track-id drift in a
-            # live session (state must not silently invalidate).  Sessions
-            # are TTL-reaped, so the GPU is released once they go quiet.
-            with self._sessions_lock:
-                live_trackers = any(s.tracker is not None for s in self._sessions.values())
-            if live_trackers:
+            idle_time = time.time() - self._last_request_time
+            if not (idle_time > _IDLE_TIMEOUT and self._device.startswith("cuda")):
                 continue
+            with self._sessions_lock:
+                # Global idle > _IDLE_TIMEOUT implies every session is idle
+                # too (both clocks advance on each request), so nobody is
+                # mid-track and dropping the live trackers is safe.  The next
+                # call adopts a FRESH tracker, and per this box's contract a
+                # fresh tracker restarts its numbering from the base (_attach
+                # _tracker) — exactly the "reset == start over" semantics.
+                for s in self._sessions.values():
+                    s.tracker = None
+            self._tracker_setups.clear()
             with self._lock:
-                idle_time = time.time() - self._last_request_time
-                if idle_time > _IDLE_TIMEOUT and self._device.startswith("cuda"):
-                    logging.info("Idle timeout reached: moving model back to CPU")
-                    self._model.to("cpu")
-                    self._torch.cuda.empty_cache()
-                    self._device = "cpu"
+                if not self._device.startswith("cuda"):
+                    return
+                logging.info("Idle timeout reached: moving model back to CPU")
+                self._model.to("cpu")
+                self._device = "cpu"
+                # Also drop the cached predictor's tracker slot: it is a plain
+                # attribute holding CUDA buffers, unreachable by .to()/
+                # empty_cache().
+                try:
+                    predictor = self._model.predictor
+                    if predictor is not None and hasattr(predictor, "trackers"):
+                        del predictor.trackers
+                except Exception:
+                    logging.exception("failed to drop cached predictor trackers")
+                self._torch.cuda.empty_cache()
 
     def _place_model(self, parameters):
         """Move the model (under the lock): explicit ``parameters.device``
@@ -600,6 +613,7 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
     # ---------------------------------------------------------------- Process
     def Process(self, request, context):
         start_time = time.time()
+        self._last_request_time = time.time()  # keep the idle watchdog honest
 
         try:
             if not request.config_json:
