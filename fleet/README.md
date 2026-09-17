@@ -7,7 +7,7 @@ the concrete proof that the core is box-agnostic.
 
 | file              | purpose |
 |-------------------|---------|
-| `docker-compose.yml` | launches 8 real boxes (clip, textEmbedding, tapnext, lang_segm, opencv, vggt, moge, yolo) on host ports 9061–9068, all on the shared `PipelineService` interface |
+| `docker-compose.yml` | launches 9 real boxes (clip, textEmbedding, tapnext, lang_segm, opencv, vggt, moge, yolo, lightglue) on host ports 9061–9069, all on the shared `PipelineService` interface |
 | `hello.py`        | the *minimal* end-user interface: one list of `(name, address, data, config)` specs, one `Box.run(...)` per box |
 
 ## Use
@@ -44,3 +44,4 @@ docker compose down           # stop
 | vggt        | 9066      | `vggt`         | 3D reconstruction (points/depth/cameras + GLB) — heavy image, ~12 GB pull |
 | moge        | 9067      | `moge`         | MoGe-3 single-view geometry (metric depth/points/normals) — CUDA-only |
 | yolo        | 9068      | `yolo`         | YOLO detection **+ tracking** on images and/or a decoded video (ultralytics; per-session track ids — `session_id`/`reset`/`list` like tapnext) |
+| lightglue   | 9069      | `lightglue`    | SuperPoint/DISK features + LightGlue matching (1 image: features; 2: + `matches`/`confidence`) — `match` / `reset` commands on `Process` |

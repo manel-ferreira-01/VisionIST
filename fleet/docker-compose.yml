@@ -101,3 +101,12 @@ services:
     ports: ["9068:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
+
+  lightglue:
+    <<: *gpu
+    build: { context: ../images/lightglue_box, dockerfile: docker/Dockerfile }
+    image: boxes-local/lightglue
+    container_name: box-lightglue
+    ports: ["9069:8061"]
+    environment: [ PORT=8061 ]
+    restart: unless-stopped
