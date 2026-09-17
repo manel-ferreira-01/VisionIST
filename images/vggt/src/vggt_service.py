@@ -146,6 +146,11 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
                 if idle_time > _IDLE_TIMEOUT and self._device.startswith("cuda"):
                     logging.info("Idle timeout reached: moving model back to CPU")
                     self._model.to("cpu")
+                    # The PositionGetter caches are plain dicts on the
+                    # module (not nn.Modules): they keep their CUDA tensors
+                    # after the model move, so empty_cache() alone can't
+                    # release them — clear them first.
+                    _clear_position_caches(self._model)
                     torch.cuda.empty_cache()
                     self._device = "cpu"
 
