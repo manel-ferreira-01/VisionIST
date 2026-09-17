@@ -16,7 +16,9 @@ name                behavior
 ``json``            UTF-8 JSON document -> ``list``/``dict``/scalar
 ``torch``           ``torch.save`` bytes -> the unpickled object
                     (Tensor or dict of Tensors); needs ``torch``
-``numpy``           raw float32 buffer -> ``np.ndarray``
+``numpy``           ``numpy.save`` (``.npy``) blob -> the array with its
+                    shape/dtype restored, or a plain raw float32 buffer ->
+                    1-D ``np.ndarray`` (legacy)
 ``zstd_pickle``     ``zstd.compress(pickle.dumps(obj))`` -> ``obj``;
                     needs ``zstandard``
 ==================  =========================================================
@@ -58,9 +60,14 @@ def _decode_torch(buf: bytes):
 
 
 def _decode_numpy(buf: bytes) -> "np.ndarray":
-    """Raw numeric buffer (float32, per the opencv_box ``np_to_bytes``
-    contract)."""
-    return np.frombuffer(buf, dtype=np.float32)
+    """Preferred: a ``numpy.save`` (``.npy``) blob — the format opencv_box
+    emits via ``np_to_bytes`` — decoded with its shape and dtype intact.
+    Fallback: a plain raw float32 buffer -> 1-D array (the original
+    contract; the codec_smoke round-trip)."""
+    try:
+        return np.load(io.BytesIO(buf), allow_pickle=False)
+    except Exception:
+        return np.frombuffer(buf, dtype=np.float32)
 
 
 def _decode_zstd_pickle(buf: bytes):

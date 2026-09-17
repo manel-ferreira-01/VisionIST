@@ -165,10 +165,10 @@ class Box:
             The box-specific control payload (dict) serialized to
             ``Envelope.config_json``. Shape depends on the box.
         method:
-            RPC name to invoke (default ``"Process"``). Boxes may expose extra
-            methods (e.g. opencv's ``similarity_check``); most boxes serve only
+            RPC name to invoke (default ``"Process"``). Most boxes serve only
             the shared ``Process`` and dispatch on ``command`` (the tapnext
-            pattern, which yologpt uses).
+            pattern — every standard box in this fleet uses it); ``method=
+            `` only exists for the rare box that serves an extra named RPC.
         reset_first:
             If ``True``, send a tapnext-style reset (config-only
             ``{config_key: {"command": "reset"}}``) on ``Process`` first.
