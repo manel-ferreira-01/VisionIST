@@ -100,6 +100,61 @@ class MoGeBox(pipeline_pb2_grpc.PipelineServiceServicer):
         
         if target.startswith("cuda"):
             torch.cuda.empty_cache()
+        else:
+            # .to("cpu") only relocates registered params/buffers; MoGe keeps
+            # extra state (feature caches / intermediate buffers) as plain
+            # attributes that would keep pinning VRAM.  Null them, then give
+            # the allocator blocks back to the driver.
+            self._release_cuda_leftovers()
+            torch.cuda.empty_cache()
+
+    def _release_cuda_leftovers(self) -> None:
+        """Drop non-parameter CUDA tensors left on the model after parking.
+
+        Walks the model object graph and nulls any attribute that is (or
+        holds a dict/list of) a CUDA tensor.  Safe to run only when parking:
+        registered parameters/buffers are already on CPU at that point, and
+        any remaining CUDA tensors are by definition caches/intermediates
+        (they are recomputed on the next inference).
+        """
+        if self._model is None:
+            return
+        seen: set = set()
+        cleared = []
+
+        def _purge(obj):
+            if obj is None or id(obj) in seen:
+                return
+            try:
+                attrs = vars(obj)
+            except TypeError:
+                return
+            seen.add(id(obj))
+            for name, val in list(attrs.items()):
+                try:
+                    if torch.is_tensor(val):
+                        if val.is_cuda:
+                            setattr(obj, name, None)
+                            cleared.append(name)
+                    elif isinstance(val, dict):
+                        if any(torch.is_tensor(v) and v.is_cuda for v in val.values()):
+                            val.clear()
+                            cleared.append(name)
+                        else:
+                            _purge(val)
+                    elif isinstance(val, (list, tuple)):
+                        if any(torch.is_tensor(v) and v.is_cuda for v in val):
+                            setattr(obj, name, [] if isinstance(val, list) else tuple())
+                            cleared.append(name)
+                        else:
+                            _purge(val)
+                except Exception:
+                    continue
+
+        for module in self._model.modules():
+            _purge(module)
+        if cleared:
+            logging.info(f"MoGe-3 parking: released {len(cleared)} CUDA-cached attribute(s): {cleared[:10]}")
 
     def _watchdog_loop(self):
         """Fallback to CPU after IDLE_TIMEOUT seconds of inactivity."""
