@@ -1,10 +1,9 @@
 # Define workdir folder for all stages
 # Must be renewed in the beggining of each stage
 ARG WORKSPACE=/workspace
-# This argument will be used to identify the
-# proto file as well as the python file with the server
-# The proto file should have the name ${SERVICE_NAME}.proto
+# SERVICE_NAME identifies the python file with the server
 # The python file should have the name ${SERVICE_NAME}_service.py
+# All boxes share the same proto file: pipeline.proto
 ARG SERVICE_NAME=opencv
 
 
