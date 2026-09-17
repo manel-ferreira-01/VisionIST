@@ -234,6 +234,7 @@ class PipelineService(tapnext_pb2_grpc.PipelineServiceServicer):
         if not self._session_ttl or self._session_ttl <= 0:
             return
         now = time.time()
+        reaped_any = False
         with self._sessions_lock:  # L1
             for sid, sess in list(self._sessions.items()):
                 if now - sess.last_used <= self._session_ttl:
@@ -242,10 +243,15 @@ class PipelineService(tapnext_pb2_grpc.PipelineServiceServicer):
                     continue  # in flight — leave it for the next cycle
                 try:
                     del self._sessions[sid]
+                    reaped_any = True
                     logging.info(
                         f"Reaped idle session {sid} (idle {now - sess.last_used:.0f}s)")
                 finally:
                     sess.lock.release()  # L2 released before L1
+        if reaped_any:
+            # The dead sessions' GPU tensors (tracking_state etc.) are now
+            # unreferenced; give the allocator blocks back to the driver.
+            torch.cuda.empty_cache()
 
     def _park_model_if_idle(self):
         """Park the (expensive, shared) model on CPU after global idle.
@@ -265,9 +271,16 @@ class PipelineService(tapnext_pb2_grpc.PipelineServiceServicer):
                     return  # someone is mid-inference; retry next cycle
                 held.append(sess)  # L2 under L1 — legal ordering
             try:
+                # The per-session tracking_state tensors live on CUDA and are
+                # NOT released by the model move (plain session attributes).
+                # Drop them: the session re-initializes on its next frame
+                # (initialized goes False), so nothing observable is lost.
+                for s in held:
+                    s.tracking_state = None
+                    s.initialized = False
                 logging.info(
                     f"Parking model to CPU after _IDLE_TIMEOUT "
-                    f"({len(held)} session(s) keep their state on GPU)")
+                    f"({len(held)} session(s) also drop their tracking state)")
                 with self._device_lock:  # L3 under L2 under L1 — legal
                     self._model.to("cpu")
                     torch.cuda.empty_cache()
