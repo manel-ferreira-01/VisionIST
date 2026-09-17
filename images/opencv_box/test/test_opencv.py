@@ -11,16 +11,14 @@ Connects to a running opencv box and:
      error otherwise)
   4. ``empty_request`` / ``error`` contract (missing images, unknown command,
      bad parameters, undecodable frame)
-  5. the stateful ``similarity_check`` command: first frame always changed,
-     same frame again -> unchanged (no echo), ``ssim`` method, and
-     ``command: reset`` clearing the state (first_frame again)
+  5. ``command: reset`` as a standard no-op
 
 Run (from the repo or image root, server already up):
     python images/opencv_box/test/test_opencv.py
     BOX_HOST=10.0.0.5:8061 python images/opencv_box/test/test_opencv.py
 
 Note: no box build required — ``smoke_inprocess.py`` drives the same
-service code in-process (needs cv2 + scikit-image locally).
+service code in-process (needs cv2 locally).
 """
 
 import io
@@ -218,82 +216,15 @@ def main():
         failures.append("case4 undecodable")
 
     # ------------------------------------------------------------------ #
-    # Case 5: similarity_check command (stateful)                         #
+    # Case 5: reset (standard no-op on this fully stateless box)          #
     # ------------------------------------------------------------------ #
-    print("\n== case 5: similarity_check (stateful) ==")
-    def sim(params=None):
-        cfg = {"opencv": {"command": "similarity_check",
-                          "parameters": params or {}}}
-        return stub.Process(pipeline_pb2.Envelope(
-            config_json=json.dumps(cfg),
-            data={"images": aux.wrap_value([img_00])}))
-
-    # reset first so the sequence starts clean
-    stub.Process(pipeline_pb2.Envelope(
-        config_json=json.dumps({"opencv": {"command": "reset"}})))
-
-    response = sim()
-    section = check_status(response)
-    if section is None or section.get("status") != "done":
-        failures.append("case5 first")
-    else:
-        if not (section.get("changed") is True and section.get("first_frame") is True):
-            print(f"  first frame must be changed: {section}")
-            failures.append("case5 first_frame")
-        if "images" not in response.data:
-            failures.append("case5 first echo")
-        elif bytes(aux.unwrap_value(response.data["images"])[0]) != img_00:
-            failures.append("case5 echo content")
-        if (section.get("encoding") or {}) != {"images": "identity"}:
-            failures.append("case5 encoding")
-
-    response = sim()  # same frame again -> no change
-    section = check_status(response)
-    if section is None or section.get("status") != "done":
-        failures.append("case5 second")
-    else:
-        if section.get("changed") is not False:
-            print(f"  identical frame should be unchanged: {section}")
-            failures.append("case5 unchanged")
-        if "images" in response.data:
-            print("  unchanged frame must not be echoed")
-            failures.append("case5 unchanged echo")
-        print(f"  metric={section.get('metric')!r} type={section.get('metric_type')!r} "
-              f"frames={section.get('num_frames')}")
-
-    # reset clears the state -> the next frame is a first frame again
-    stub.Process(pipeline_pb2.Envelope(
-        config_json=json.dumps({"opencv": {"command": "reset"}})))
-    response = sim()
-    section = check_status(response)
-    if section is None or not (section.get("first_frame") is True
-                               and section.get("changed") is True
-                               and section.get("num_frames") == 1):
-        failures.append("case5 reset cleared state")
-
-    # ssim method
-    response = stub.Process(pipeline_pb2.Envelope(
-        config_json=json.dumps({"opencv": {"command": "similarity_check",
-                                           "parameters": {"method": "ssim",
-                                                          "ssim_thresh": 0.99}}}),
-        data={"images": aux.wrap_value([img_01])},
-    ))
-    section = check_status(response)
-    if section is None or section.get("metric_type") != "ssim":
-        failures.append("case5 ssim")
-    else:
-        print(f"  ssim={section.get('metric')!r} changed={section.get('changed')}")
-
-    # ------------------------------------------------------------------ #
-    # Case 6: reset (stateless no-op on match, clears similarity state)  #
-    # ------------------------------------------------------------------ #
-    print("\n== case 6: reset command ==")
+    print("\n== case 5: reset command ==")
     response = stub.Process(pipeline_pb2.Envelope(
         config_json=json.dumps({"opencv": {"command": "reset"}})))
     section = check_status(response)
     if section is None or section.get("status") != "done" \
             or section.get("action") != "reset":
-        failures.append("case6 reset")
+        failures.append("case5 reset")
     else:
         print(f"  ok: {section}")
 

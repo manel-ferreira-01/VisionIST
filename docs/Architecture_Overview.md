@@ -36,8 +36,7 @@ per-box) and a `data` map of named, typed values (images, tensors, blobs).
 Full request/response contract: see
 [gRPC_Services_Reference](gRPC_Services_Reference.md).
 
-(All standard boxes — including `opencv_box`, which used to carry an
-extra `similarity_check` RPC — now serve the single shared `Process` RPC;
+(All standard boxes serve the single shared `Process` RPC;
 box-specific behaviour is selected with a `command` field.)
 
 ## Box layout (every box is the same shape)

@@ -1,8 +1,7 @@
 # OpenCV Box
 
 Classic computer-vision utilities behind the **shared envelope** interface:
-feature extraction & matching, and a stateful frame-change gate for video
-streams. Same one-RPC contract as every standard box:
+feature extraction & matching. Same one-RPC contract as every standard box:
 
 ```python
 service PipelineService {
@@ -13,16 +12,7 @@ service PipelineService {
 | Command | What it does | State |
 |---|---|---|
 | `match` (default) | keypoints + descriptors per image; with exactly **2** images also matches (`FLANN` or `LightGlue`) + RANSAC fundamental matrix. Stateless | none |
-| `similarity_check` | gates an incoming frame against the last *changed* frame — Lucas–Kanade mean displacement (`method: "motion"`, default) or SSIM (`method: "ssim"`); `changed` frames are echoed back in `data.images` | reference frame + tracked points (cleared by `reset`) |
-| `reset` | clear the `similarity_check` state (harmless no-op for `match`) | — |
-
-> **Migration note.** This box predates the shared contract: it used to
-> serve `similarity_check` as a *second RPC* with flat `"status":
-> "success"` responses. That is gone. The RPC surface is now the standard
-> one (`Process`), `similarity_check` is a **command** of `Process`, and
-> responses are namespaced under `"opencv"` with the
-> `done | empty_request | error` status vocabulary. Old callers: send the
-> same envelope through `Process` with `"command": "similarity_check"`.
+| `reset` | standard no-op (this box is stateless) | — |
 
 ## Directory structure
 
@@ -40,7 +30,6 @@ opencv_box/
 ├── test/
 │   ├── test_opencv.py         # smoke test against a running box
 │   ├── smoke_inprocess.py     # drives the service in-process (no box build)
-│   ├── test.ipynb             # manual playground
 │   ├── 00.jpg                 # test fixture
 │   └── 01.jpg                 # test fixture
 ├── requirements.txt
@@ -74,19 +63,11 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 sipgisr/opencvbox
 // config_json — namespaced under the box key
 {
   "opencv": {
-    "command": "match",            // "match" (default) | "similarity_check" | "reset"
+    "command": "match",            // "match" (default) | "reset"
     "parameters": {
-      "feature_extractor": "SIFT", // match: SIFT | ORB | SUPERPOINT | DISK
-      "ratio_thresh": 0.75,        // match (FLANN): Lowe's ratio
-      "max_keypoints": 500,        // match (LightGlue: 2048 default)
-      "method": "motion",          // similarity_check: "motion" | "ssim"
-      "motion_thresh": 1.5,        // similarity_check (motion): px displacement
-      "ssim_thresh": 0.90,         // similarity_check (ssim)
-      "blur_kernel": 5,            // similarity_check
-      "max_corners": 200,          // similarity_check (tracked features)
-      "quality_level": 0.01,
-      "min_distance": 5,
-      "block_size": 7,
+      "feature_extractor": "SIFT", // SIFT | ORB | SUPERPOINT | DISK
+      "ratio_thresh": 0.75,        // FLANN: Lowe's ratio
+      "max_keypoints": 500,        // (LightGlue: 2048 default)
       "device": "cuda"             // optional: "cpu" | "cuda" | "cuda:N"
                                    //    (wins over the auto lifecycle; only
                                    //    matters when LightGlue is in use)
@@ -99,7 +80,7 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 sipgisr/opencvbox
 
 | field    | kind | meaning |
 |----------|------|---------|
-| `images` | `bb` | `match`: 1 image → extraction only, 2 images → + matching & fundamental matrix. `similarity_check`: the latest frame (the last entry if several are sent) |
+| `images` | `bb` | 1 image → extraction only, 2 images → + matching & fundamental matrix |
 
 ### Response
 
@@ -124,20 +105,6 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 sipgisr/opencvbox
   }
 }
 
-// similarity_check, a frame changed
-{
-  "opencv": {
-    "status": "done",
-    "metric": 4.13,                  // px displacement (motion) or SSIM (ssim)
-    "metric_type": "motion",
-    "changed": true,
-    "first_frame": true,             // true only right after startup/reset
-    "num_frames": 1,                 // frames gated since startup/reset
-    "runtime": 0.01,
-    "encoding": { "images": "identity" }
-  }
-}
-
 // reset
 { "opencv": { "status": "done", "action": "reset" } }
 ```
@@ -154,7 +121,6 @@ command, bad parameter, undecodable frame, unknown extractor, …).
 | `descriptors` | `b` (`numpy`) | per-image descriptor matrix, same padding: `(num_images, N, 128)` (SIFT) / `(num_images, N, 32)` (ORB) / `(2, N, 256)` (LightGlue — placeholder zeros) |
 | `matches_inliers_a` / `matches_inliers_b` | `b` (`numpy`) | two-image calls only: RANSAC inlier points of image A / image B, `(K, 2)` |
 | `fundamental_matrix` | `b` (`numpy`) | two-image calls only: the estimated 3×3 F (empty `(0, 0)` when matches were insufficient) |
-| `images` | `bb` (`identity`) | `similarity_check` only, and only when `changed`: the incoming frame bytes, for downstream publishing |
 
 The declared `numpy` fields decode to `np.ndarray` in `boxes_client` (the
 codec restores the `np.save` array — see `docs/CODECS.md`).
@@ -165,15 +131,8 @@ codec restores the `np.save` array — see `docs/CODECS.md`).
   only; exactly two return the matching section. LightGlue extractors
   accept **exactly two** images (an error otherwise) — they replace the
   old SIFT-only path when present in the image.
-- **`similarity_check`** compares the incoming frame against the last
-  *changed* frame (unchanged frames keep the reference, so small drifting
-  changes still trip the gate). The **first frame after startup or after
-  `reset` is always reported `changed: true` with `first_frame: true`**.
-  Frames are downscaled to 320×240 and blurred before comparing — cheap by
-  design.
-- **`reset`** clears the reference frame and tracked points
-  (`num_frames` restarts at 1). It is the standard box reset and is a
-  harmless no-op for the stateless `match` command.
+- **`reset`** is the standard box reset; on this box it is a plain no-op,
+  since `match` is the only command and it is stateless.
 
 ## Call with boxes_client
 
@@ -195,20 +154,6 @@ print(res.encoding)          # {'keypoints': 'numpy', …}
 print(res.config["opencv"])  # status / matcher / num_inliers / runtime
 kp = res.keypoints           # already decoded: np.ndarray (2, N, 2)
 F  = res.fundamental_matrix  # (3, 3) — F @ pts_a  ~  pts_b (up to scale)
-
-# --- frame gating (video stream) ---------------------------------------
-for frame in frames:                          # e.g. decoded from a video
-    r = b.run(
-        data   = {"images": [frame]},
-        config = {"opencv": {"command": "similarity_check",
-                             "parameters": {"motion_thresh": 3.0}}},
-    )
-    sec = r.config["opencv"]
-    if sec["changed"]:
-        publish(sec["metric"], r.images[0])   # r.images = the changed frame
-
-# --- clear the gate -----------------------------------------------------
-b.run(config={"opencv": {"command": "reset"}})
 ```
 
 ## GPU behaviour
@@ -226,8 +171,6 @@ python images/opencv_box/test/test_opencv.py
 BOX_HOST=10.0.0.5:8061 python images/opencv_box/test/test_opencv.py
 
 # no box build needed — drives src/opencv_service.py in-process
-# (needs numpy, opencv-python(-headless), scikit-image)
+# (needs numpy, opencv-python(-headless) locally)
 cd images/opencv_box && python test/smoke_inprocess.py
 ```
-
-`test/test.ipynb` is the manual playground (match + similarity gating).

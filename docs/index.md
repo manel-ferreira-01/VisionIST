@@ -31,7 +31,7 @@ shared gRPC envelope, called by `boxes_client` or by orchestration-layer boxes.
 | textEmbedding | GPU / CPU | Sentence-BERT text embeddings |
 | vggt | GPU | 3D reconstruction from image sequences |
 | yolo | GPU / CPU | Object detection **+ tracking** (YOLOv8n via ultralytics) on images and videos — per-session track ids (multi-session, tapnext contract) |
-| opencv_box | GPU / CPU | Optical flow, feature matching, similarity checks |
+| opencv_box | GPU / CPU | Feature extraction & matching (SIFT / ORB / LightGlue) |
 | moge_box | GPU | **MoGe-3: Monocular 3D geometry (depth/points/normals)** |
 
 **The per-box README is the authoritative source for that box's request shape**

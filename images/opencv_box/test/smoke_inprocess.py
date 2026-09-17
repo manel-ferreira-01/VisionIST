@@ -111,36 +111,7 @@ r = call(srv, {"opencv": {"command": "reset"}})
 s = section(r)
 check("reset done", s.get("status") == "done" and s.get("action") == "reset", str(s))
 
-print("== 7. similarity_check sequence ==")
-r = call(srv, {"opencv": {"command": "similarity_check"}}, [A])
-s = section(r)
-print("   ", s)
-check("first frame changed", s.get("changed") is True and s.get("first_frame") is True)
-check("frame echoed", "images" in r.data and bytes(unwrap_value(r.data["images"])[0]) == A)
-check("encoding identity", s.get("encoding", {}) == {"images": "identity"})
-
-r = call(srv, {"opencv": {"command": "similarity_check"}}, [A])  # same frame again
-s = section(r)
-check("no change", s.get("changed") is False, f"metric={s.get('metric'):.4f}")
-check("no echo when unchanged", "images" not in r.data)
-check("num_frames", s.get("num_frames") == 2, str(s.get("num_frames")))
-
-print("== 8. similarity_check ssim method ==")
-r = call(srv, {"opencv": {"command": "similarity_check",
-                          "parameters": {"method": "ssim", "ssim_thresh": 0.99}}}, [B])
-s = section(r)
-check("ssim first frame (after different frame changed? B differs)", 
-      (s.get("changed") in (True, False)), str(s))
-check("metric_type ssim", s.get("metric_type") == "ssim")
-
-print("== 9. similarity state cleared by reset ==")
-r = call(srv, {"opencv": {"command": "reset"}})
-r = call(srv, {"opencv": {"command": "similarity_check"}}, [A])
-s = section(r)
-check("first_frame again after reset", s.get("first_frame") is True
-      and s.get("num_frames") == 1, str(s))
-
-print("== 10. bad frame -> error ==")
+print("== 7. bad frame -> error ==")
 r = call(srv, {"opencv": {"command": "match"}}, [b"not an image"])
 check("error on undecodable", section(r).get("status") == "error",
       str(section(r).get("error")))

@@ -67,7 +67,7 @@ Use them; don't hand-roll the oneof.
 | clip | `clip` | stateless |
 | textEmbedding | `sbert` | stateless |
 | lang_segm | `lang_sam` | aliases accepted: `lang_segm`, `aispgradio`, or the legacy flat form |
-| opencv_box | `opencv` | `match` (default) / `similarity_check` (stateful — reference frame only, cleared by `reset`) / `reset` as commands of `Process`; `match` is stateless (1 image: extraction, 2: + matches & fundamental matrix); response declares `keypoints`/`descriptors`/`matches_inliers_a`/`matches_inliers_b`/`fundamental_matrix` as `numpy` (np.save blobs), similarity frames as `identity` |
+| opencv_box | `opencv` | `match` (default) / `reset` as commands of `Process`; `match` is stateless (1 image: extraction, 2: + matches & fundamental matrix); response declares `keypoints`/`descriptors`/`matches_inliers_a`/`matches_inliers_b`/`fundamental_matrix` as `numpy` (np.save blobs) |
 | vggt | `vggt` | stateless; legacy `aispgradio` section / flat form accepted; response declares per-field `encoding` (torch tensors, identity GLB) |
 | moge_box | `moge` | stateless; **CUDA-only** (`cpu` rejected); outputs a per-image dict — `points (H,W,3)` / `depth (H,W)` / `normal (H,W,3)` / `intrinsics (3,3)` / `mask (H,W)` (OpenCV camera coords), encoding `zstd_pickle` |
 | yolo | `yolo` | **multi-session tracker state** (tapnext contract): always tracks — every box in `detections` carries a per-session `track_id` (stable within a `session_id`, independent across sessions); `reset` scopes to the calling session, `list` lists active ones; `data.images` and/or a single decoded `data.video` (`frame_step`/`max_frames`); response declares `detections` as `json`, `annotated` as `identity` |

@@ -1,19 +1,14 @@
 """opencv box — classic computer-vision utilities behind the shared envelope.
 
-A standard shared-envelope box (one RPC: ``Process``) with three commands in
+A standard shared-envelope box (one RPC: ``Process``) with two commands in
 the ``config_json`` section ``{"opencv": {"command": ..., "parameters": {...}}}``:
 
 * **``match``** (the default when no command is given) — extract features
   (SIFT / ORB via OpenCV, or SuperPoint / DISK via LightGlue) for each input
   image; with exactly two images in, also compute the matches plus a RANSAC
   fundamental matrix.  Stateless.
-* **``similarity_check``** — stateful frame-change detector for video
-  streams: Lucas–Kanade mean point displacement (``parameters.method:
-  "motion"``, the default) or SSIM (``"ssim"``) of the incoming frame
-  against the last *changed* frame.  The reference frame is the box's only
-  state (``command: reset`` clears it; ``match`` is stateless).
-* **``reset``** — clear the ``similarity_check`` state.  Accepted by every
-  standard box; here it is a real no-op for the stateless ``match`` path.
+* **``reset``** — accepted by every standard box; here it is a plain no-op,
+  since ``match`` is stateless.
 
 Contract (see docs/gRPC_Services_Reference.md):
 
@@ -22,17 +17,12 @@ Contract (see docs/gRPC_Services_Reference.md):
   ``"error"`` on failure), plus ``runtime`` and box-specific fields.
 * the response declares its payload encoding (``"encoding": {field: codec}``):
   all feature outputs are ``np.save`` (``.npy``) blobs declared ``numpy`` —
-  ``boxes_client`` decodes them to ``np.ndarray`` keeping their shape;
-  ``similarity_check`` echoes the changed frame as raw JPEG bytes
-  (declared ``identity``).
+  ``boxes_client`` decodes them to ``np.ndarray`` keeping their shape.
 * ``parameters.device`` (optional; ``"cpu"`` / ``"cuda"`` / ``"cuda:0"``)
   wins over the default (CUDA if visible) for the LightGlue models.
 * GPU lifecycle (fleet convention): LightGlue loads lazily on first use,
   lives on the requested device, and a watchdog thread parks it on CPU after
   ``_IDLE_TIMEOUT`` seconds of inactivity, so ``empty_cache()`` reclaims VRAM.
-
-Migration note: the box's pre-contract extra RPC ``similarity_check(Envelope)``
-is gone — callers now send ``Process`` with ``command: "similarity_check"``.
 """
 
 import concurrent.futures as futures
@@ -64,16 +54,6 @@ _MATCH_DEFAULTS = {
     "max_keypoints": 500,          # raised to 2048 automatically for LightGlue
 }
 _MATCH_LG_MAX_KEYPOINTS = 2048
-_SIM_DEFAULTS = {
-    "method": "motion",            # "motion" (Lucas–Kanade) or "ssim"
-    "motion_thresh": 1.5,          # px mean displacement (motion method)
-    "ssim_thresh": 0.90,           # SSIM gate (ssim method)
-    "blur_kernel": 5,
-    "max_corners": 200,
-    "quality_level": 0.01,
-    "min_distance": 5,
-    "block_size": 7,
-}
 
 
 def torch_device_default():
@@ -152,31 +132,6 @@ def _parse_match_parameters(parameters):
     }
 
 
-def _parse_sim_parameters(parameters):
-    spec = {
-        "motion_thresh": _num(parameters, "motion_thresh",
-                              float(_SIM_DEFAULTS["motion_thresh"]), float),
-        "ssim_thresh": _num(parameters, "ssim_thresh",
-                            float(_SIM_DEFAULTS["ssim_thresh"]), float),
-        "blur_kernel": int(_num(parameters, "blur_kernel",
-                                int(_SIM_DEFAULTS["blur_kernel"]), int)),
-        "max_corners": _num(parameters, "max_corners",
-                            int(_SIM_DEFAULTS["max_corners"]), int),
-        "quality_level": _num(parameters, "quality_level",
-                              float(_SIM_DEFAULTS["quality_level"]), float),
-        "min_distance": _num(parameters, "min_distance",
-                             int(_SIM_DEFAULTS["min_distance"]), int),
-        "block_size": _num(parameters, "block_size",
-                           int(_SIM_DEFAULTS["block_size"]), int),
-    }
-    method = str(parameters.get("method") or _SIM_DEFAULTS["method"]).lower()
-    if method not in ("motion", "ssim"):
-        raise ValueError(
-            f"parameters.method must be 'motion' or 'ssim', got {parameters.get('method')!r}")
-    spec["method"] = method
-    return spec
-
-
 def _parse_extractor(fx_param):
     """feature_extractor parameter -> (name, is_lightglue).
 
@@ -193,12 +148,6 @@ def _parse_extractor(fx_param):
 # ---------------------------------------------
 class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
     def __init__(self):
-        # similarity_check state (the box's only state; ``match`` is stateless)
-        self._sim_lock = threading.Lock()
-        self._prev_gray = None
-        self._prev_points = None
-        self._frames_checked = 0
-
         # LightGlue models (lazy initialized on first LightGlue ``match``)
         self._lg_extractor = None
         self._lg_matcher = None
@@ -257,14 +206,6 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
                 self._lg_extractor.to(target)
                 self._lg_matcher.to(target)
                 self._lg_placed = target
-
-    def _clear_similarity_state(self):
-        """``command: reset`` — drop the reference frame and tracked points."""
-        with self._sim_lock:
-            self._prev_gray = None
-            self._prev_points = None
-            self._frames_checked = 0
-            logging.info("similarity_check state cleared (reset)")
 
     # ------------------------------------------------------------- inputs
     @staticmethod
@@ -411,101 +352,6 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
         out["descriptors"] = np.zeros((2, max_len, 256), dtype=np.float32)
         return out
 
-    # ------------------------------------------------------ similarity check
-    def _command_similarity_check(self, img_bytes, spec, start_time):
-        """One frame-change decision (see module docstring). The reference
-        frame (and tracked points for the motion method) is kept until the
-        next ``changed`` frame or a ``reset``."""
-        # --- decode image ---
-        raw_frame = image_bytes = img_bytes if isinstance(img_bytes, (bytes, bytearray)) \
-            else bytes(img_bytes)
-
-        # Try decoding using OpenCV first
-        img = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if img is None:
-            # Fallback: PIL can handle cases OpenCV rejects (e.g. some 4-ch PNGs)
-            try:
-                from PIL import Image
-                img_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-            except Exception:
-                img = None
-        if img is None:
-            raise ValueError("could not decode the input frame (not a supported raster?)")
-
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.resize(gray, (320, 240))
-        gray = cv2.GaussianBlur(gray, (spec["blur_kernel"], spec["blur_kernel"]), 0)
-
-        with self._sim_lock:
-            self._frames_checked += 1
-            frames = self._frames_checked
-
-            # --- First frame: no reference yet — always "changed".          ---
-            if self._prev_gray is None:
-                self._prev_gray = gray
-                self._prev_points = PipelineService._good_features(gray, spec)
-                return _done(
-                    {"metric": 0.0, "metric_type": spec["method"],
-                     "changed": True, "first_frame": True, "num_frames": frames,
-                     "runtime": time.time() - start_time},
-                    data={"images": wrap_value([raw_frame])},
-                    encoding={"images": "identity"})
-
-            if spec["method"] == "ssim":
-                # === SSIM SIMILARITY CHECK ===
-                from skimage.metrics import structural_similarity as ssim
-                metric_val = float(ssim(gray, self._prev_gray))
-                changed = metric_val < spec["ssim_thresh"]
-                metric_name = "ssim"
-            else:
-                # === LUCAS–KANADE MOTION DETECTION ===
-                next_points, status, _ = cv2.calcOpticalFlowPyrLK(
-                    self._prev_gray, gray, self._prev_points, None,
-                    winSize=(15, 15), maxLevel=2,
-                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-                metric_val = 0.0
-                if next_points is not None and status is not None:
-                    next_points = np.asarray(next_points, dtype=np.float32)
-                    pts0 = np.asarray(self._prev_points, dtype=np.float32)
-                    # status may be (N,) or (N,1) depending on the OpenCV build
-                    keep = np.asarray(status, dtype=bool).ravel()
-                    if keep.any():
-                        disp = np.linalg.norm(
-                            next_points[keep] - pts0[keep], axis=1)
-                        metric_val = float(np.mean(disp))
-                changed = metric_val > spec["motion_thresh"]
-                metric_name = "motion"
-                # update tracked features for the next frame
-                self._prev_points = PipelineService._good_features(gray, spec)
-
-            if changed:
-                # New reference frame; subsequent frames gate against it.
-                self._prev_gray = gray
-            else:
-                # Keep comparing against the last *changed* frame.
-                logging.info("No change — keeping previous reference frame.")
-
-        extra = {"metric": metric_val, "metric_type": metric_name,
-                 "changed": bool(changed), "num_frames": frames,
-                 "runtime": time.time() - start_time}
-        if changed:
-            # Echo the (changed) frame for downstream publishing.
-            return _done(extra,
-                         data={"images": wrap_value([raw_frame])},
-                         encoding={"images": "identity"})
-        return _done(extra)
-
-    @staticmethod
-    def _good_features(gray, spec):
-        return cv2.goodFeaturesToTrack(
-            gray,
-            maxCorners=int(spec["max_corners"]),
-            qualityLevel=spec["quality_level"],
-            minDistance=int(spec["min_distance"]),
-            blockSize=int(spec["block_size"]),
-        )
-
     # ---------------------------------------------------------------- Process
     def Process(self, request, context):
         start_time = time.time()
@@ -524,15 +370,13 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
             if not isinstance(parameters, dict):
                 return _error("parameters must be an object")
 
-            # --- reset: stateless on this box except similarity_check state -
+            # --- reset: plain no-op (this box is fully stateless) ---------
             if command == "reset":
-                self._clear_similarity_state()
                 return _done({"action": "reset"})
 
-            if command not in ("match", "similarity_check"):
+            if command != "match":
                 return _error(
-                    f"unknown command {command!r} "
-                    "(expected one of: match | similarity_check | reset)")
+                    f"unknown command {command!r} (expected 'match' or 'reset')")
 
             images = unwrap_value(request.data["images"]) if "images" in request.data else None
             if isinstance(images, (bytes, bytearray)):
@@ -545,11 +389,6 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
             if req_device:
                 device = req_device
             imgs_in = self._decode_images(images)
-
-            if command == "similarity_check":
-                spec = _parse_sim_parameters(parameters)
-                # The *last* supplied frame is the one being gated.
-                return self._command_similarity_check(images[-1], spec, start_time)
 
             # --------------------------------------------------------------- match
             spec = _parse_match_parameters(parameters)

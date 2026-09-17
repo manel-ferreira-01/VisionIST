@@ -150,8 +150,7 @@ Optional (currently decoded by the legacy chain) — for robustness, same one-li
 Already declared (reference):
 - **opencv**: `"encoding": {"keypoints": "numpy", "descriptors": "numpy",
   "matches_inliers_a": "numpy", "matches_inliers_b": "numpy",
-  "fundamental_matrix": "numpy"}` (np.save blobs), plus `"images": "identity"`
-  on the `similarity_check` echo.
+  "fundamental_matrix": "numpy"}` (np.save blobs).
 
 > Boxes that add `encoding` only change their *self-description*; a new client
 > decodes it, an old client ignores the extra key. Safe and reversible. Rebuild
