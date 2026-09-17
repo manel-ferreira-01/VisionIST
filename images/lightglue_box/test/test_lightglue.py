@@ -184,9 +184,59 @@ def main():
         failures.append("case4 undecodable")
 
     # ----------------------------------------------------------------------
+    # Case 4b: stream (sliding window, session_id)                       #
+    # ----------------------------------------------------------------------
+    print("\n== case 4b: stream (sliding window, session_id) ==")
+    proc(stub, {"lightglue": {"command": "reset"}})
+
+    sec = proc(stub, {"lightglue": {"command": "stream",
+                                    "parameters": {"session_id": "t1"}}}, [a])
+    if sec is None or not (sec.get("first_frame") is True and sec.get("num_frames") == 1):
+        failures.append("case4b first frame")
+    else:
+        print(f"  first: { {k: sec[k] for k in ('first_frame','num_frames') if k in sec} }")
+
+    sec = proc(stub, {"lightglue": {"command": "stream",
+                                    "parameters": {"session_id": "t1", "window": 3}}}, [b])
+    if sec is None or sec.get("window") != 1:
+        failures.append("case4b window")
+    elif "matches_1" not in sec.get("encoding", {}):
+        failures.append("case4b matches_1")
+    else:
+        print(f"  step2: window={sec.get('window')} num_matches_1={sec.get('num_matches_1')}")
+
+    sec = proc(stub, {"lightglue": {"command": "stream",
+                                    "parameters": {"session_id": "t1", "window": 3}}}, [b])
+    if sec is None or sec.get("window") != 2:
+        failures.append("case4b window2")
+    else:
+        print(f"  step3: window={sec.get('window')} m1={sec.get('num_matches_1')} m2={sec.get('num_matches_2')}")
+
+    sec = proc(stub, {"lightglue": {"command": "stream",
+                                    "parameters": {"session_id": "t1"}}}, [a, b])
+    if sec is None or sec.get("status") != "error":
+        failures.append("case4b 2 images should error")
+
+    sec = proc(stub, {"lightglue": {"command": "list"}})
+    if sec is None or "t1" not in str(sec.get("sessions")):
+        failures.append("case4b list")
+    else:
+        print(f"  list: {sec.get('sessions')}")
+
+    sec = proc(stub, {"lightglue": {"command": "reset",
+                                    "parameters": {"session_id": "t1"}}})
+    if sec is None or not (sec.get("status") == "done" and sec.get("existed") is True):
+        failures.append("case4b reset session")
+
+    sec = proc(stub, {"lightglue": {"command": "reset"}})
+    if sec is None or sec.get("status") != "done":
+        failures.append("case4b clear all")
+
+    # ----------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # Case 5: reset (standard no-op)                                     #
     # ----------------------------------------------------------------------
-    print("\n== case 5: reset command ==")
+    print("\n== case 5: reset (clears stream sessions) ==")
     sec = proc(stub, {"lightglue": {"command": "reset"}})
     if sec is None or sec.get("status") != "done" or sec.get("action") != "reset":
         failures.append("case5 reset")

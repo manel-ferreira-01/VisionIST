@@ -16,8 +16,10 @@ service PipelineService {
 
 | Command | What it does | State |
 |---|---|---|
-| `match` (default) | SuperPoint / DISK features per image; with exactly **2** images also the LightGlue matcher's output: `matches` indices (+ `confidence`) | none |
-| `reset` | standard no-op (this box is stateless) | — |
+| `match` (default) | SuperPoint / DISK features per image; with exactly **2** images also the LightGlue matcher's output: `matches` indices (+ `confidence`). Stateless | none |
+| `stream` | **sliding-window** stream matching: one new frame per call (`session_id`), matched against the last `window` stored frames → per-reference `matches_j`/`confidence_j`. Window = a ring of cached features per session | features ring per `session_id` (reset / TTL) |
+| `reset` | without `session_id`: clear **all** stream sessions; with one: clear just that session | — |
+| `list` | active stream sessions with frame counts (operator helper, like the other multi-session boxes) | — |
 
 ## Directory structure
 
@@ -66,13 +68,16 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 sipgisr/lightgluebox
 // config_json — namespaced under the box key
 {
   "lightglue": {
-    "command": "match",             // "match" (default) | "reset"
+    "command": "match",             // "match" (default) | "stream" | "reset" | "list"
     "parameters": {
       "feature_extractor": "SUPERPOINT",  // SUPERPOINT | DISK
       "max_keypoints": 1024,
       "filter_threshold": 0.5,      // optional match-confidence filter (0..1,
                                     //    default: LightGlue's own, 0.1 — higher
                                     //    = fewer, stronger matches)
+      "window": 3,                  // stream only: references the new frame is
+                                    //    matched against (1..16, default 3)
+      "session_id": "cam1",         // stream / reset only (default "default")
       "device": "cuda"              // optional: "cpu" | "cuda" | "cuda:N"
                                     //    (default: CUDA if visible, else CPU)
     }
@@ -119,6 +124,24 @@ back as `np.ndarray` with shape and dtype):
 | `matches`     | `(K, 2)`  | two-image calls: LightGlue match indices into `keypoints` — `matches[i, 0]` → image A, `matches[i, 1]` → image B |
 | `confidence`  | `(K,)`    | two-image calls: per-match confidence |
 
+### `stream` response (sliding window per `session_id`)
+
+One new frame per call. The box keeps the *extracted features* of the last
+frames per session (on CPU) and matches the new frame against the last
+`window` of them (default 3, max 16). Config carries `session`,
+`requested_window`, the actual `window` filled (`J`), `num_frames`,
+`num_matches_j` per reference — and `first_frame: true` for the session's
+first step (features stored, no matches yet).
+
+`data` (all declared `numpy`):
+
+| field         | shape              | description |
+|---------------|--------------------|-------------|
+| `keypoints`   | `(J+1, N, 2)`      | references **most-recent → oldest**, then the new frame (row `J`) |
+| `kp_counts`   | `(J+1,)`           | valid keypoints per row (rows are padded to a common `N`) |
+| `matches_j`   | `(K_j, 2)`         | reference `j` (1 = previous frame) ↔ new frame indices: col 0 → `keypoints[j-1]`, col 1 → `keypoints[J]` |
+| `confidence_j`| `(K_j,)`           | per-match confidence for reference `j` |
+
 From indices to point pairs: `pA = keypoints[0][matches[:, 0]]`,
 `pB = keypoints[1][matches[:, 1]]`.
 
@@ -131,10 +154,20 @@ unknown extractor, bad parameter, undecodable frame, …).
 - **`match`** is stateless and idempotent. One image returns its features;
   exactly two return the features plus the matcher's output — nothing more,
   nothing less.
+- **`stream`** is a sliding window over *features*, not pixels: each call,
+  the new frame's features are stored and it is matched against the last
+  `window` stored frames — so successive calls overlap by `window − 1`
+  frames' worth of context. One extractor pass + `window` matcher passes
+  per call. The cached features are the box's only per-session state
+  (≤ 16 × ~1 MB of CPU RAM), reaped after `LIGHTGLUE_SESSION_TTL` idle
+  seconds (default 1800; set 0 to keep sessions forever).
+- **`reset`** clears stream sessions (one, or all without `session_id`);
+  **`list`** shows the active ones. Both follow the other multi-session
+  boxes (tapnext / yolo).
 - Model pairs are cached per `(extractor, max_keypoints, filter_threshold)`,
   so only the first call per combination pays setup cost.
 - **Speed knobs**, in order of leverage: fewer `max_keypoints`, higher
-  `filter_threshold`, `device: cpu` for a no-GPU box.
+  `filter_threshold`, smaller `window`, `device: cpu` for a no-GPU box.
 
 ## Call with boxes_client
 
@@ -155,6 +188,25 @@ M  = res.matches              # (K, 2) indices — the network's output
 pA = kp[0][M[:, 0]]           # matched points in image A
 pB = kp[1][M[:, 1]]           # matched points in image B
 # F / E / poses / triangulation: your camera model, your cv2, your code.
+
+# --- sliding-window stream (per session_id; window = refs back) ----------
+sid = {"session_id": "cam1", "window": 3}
+for frame in frames:                            # e.g. a webcam / decoder loop
+    r = b.run(
+        data   = {"images": [frame]},
+        config = {"lightglue": {"command": "stream", "parameters": sid}},
+    )
+    sec = r.config["lightglue"]
+    if sec.get("first_frame"):
+        continue                                # first step only stores features
+    J, kp = sec["window"], r.keypoints          # rows: refs (newest first), then new
+    for j in range(1, J + 1):                   # j = 1 is the previous frame
+        m     = getattr(r, f"matches_{j}")
+        p_ref = kp[j - 1][m[:, 0]]
+        p_new = kp[J][m[:, 1]]
+# stop a stream:  b.run(config={"lightglue": {"command": "reset",
+#                                              "parameters": {"session_id": "cam1"}}})
+# or all of them: b.run(config={"lightglue": {"command": "reset"}})
 ```
 
 ## GPU behaviour
@@ -162,7 +214,9 @@ pB = kp[1][M[:, 1]]           # matched points in image B
 The models load **lazily on first use**, live on `parameters.device`
 (default: CUDA if visible, else CPU); the fleet watchdog parks them back on
 CPU after ~60 s of inactivity and releases the cache, so an idle box holds
-no VRAM.
+no VRAM. Stream sessions cache their feature rings on CPU (megabytes), so
+they neither pin VRAM nor survive a model move — they are reaped by their
+own TTL (`LIGHTGLUE_SESSION_TTL`, default 1800 s).
 
 ## Testing
 

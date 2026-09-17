@@ -14,8 +14,18 @@ Commands in the ``config_json`` section
   (SuperPoint or DISK) for each input image; with exactly two images in,
   also run the LightGlue matcher and return its ``matches`` indices (plus
   ``confidence``).  Stateless.
-* **``reset``** — accepted by every standard box; on this box it is a plain
-  no-op (nothing is held between calls).
+* **``stream``** — stateful sliding-window matching for image streams, one
+  new frame per call, keyed by ``parameters.session_id`` (multi-stream).
+  The box keeps the extracted *features* of the last frames on CPU; each
+  call matches the new frame against the last ``window`` (default 3, max
+  16) stored frames and returns one ``matches_j``/``confidence_j`` pair per
+  reference (j=1 is the previous frame).  The first frame of a session is
+  stored and reported as ``first_frame`` (no matches).
+* **``reset``** — standard no-op for the stateless commands; with
+  ``parameters.session_id`` it clears that stream session, without one it
+  clears every session.
+* **``list``** — operator helper: the active session ids and their frame
+  counts (same convention as the other multi-session boxes).
 
 Contract (see docs/gRPC_Services_Reference.md):
 
@@ -62,6 +72,13 @@ _MATCH_DEFAULTS = {
     "max_keypoints": 1024,
 }
 _SUPPORTED_EXTRACTORS = ("SUPERPOINT", "DISK")
+
+# stream (sliding window) settings
+_DEFAULT_SESSION = "default"
+_STREAM_WINDOW_DEFAULT = 3     # references the new frame is matched against
+_STREAM_WINDOW_MAX = 16        # cap the per-session feature memory
+# Idle TTL for stream sessions (0 = keep forever), like the other session boxes.
+_SESSION_TTL = float(os.getenv("LIGHTGLUE_SESSION_TTL", "1800"))
 
 def torch_device_default():
     """CUDA if visible, else CPU (lazy: torch is optional for CPU boxes)."""
@@ -163,12 +180,39 @@ def _parse_match_parameters(parameters):
 # ---------------------------------------------
 # Service Definition
 # ---------------------------------------------
+# ---------------------------------------------
+# Session (stream command)
+# ---------------------------------------------
+class Session:
+    """State for one ``stream`` (session_id).
+
+    Only the extracted *features* of the recent frames are kept (CPU
+    ndarrays — a sliding window of them), plus the frame counter.  The
+    pattern follows the other multi-session boxes (tapnext): L1 lock on
+    the sessions dict, L2 lock per session held across the whole request.
+    """
+
+    __slots__ = ("features", "num_frames", "last_used", "lock")
+
+    def __init__(self):
+        self.features = []      # oldest -> newest; each a dict of batched ndarrays
+        self.num_frames = 0
+        self.last_used = time.time()
+        self.lock = threading.Lock()   # L2
+
+
 class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
     def __init__(self):
         # Model cache: (extractor, max_keypoints, filter_threshold) -> pair
         self._models = {}
         self._device = torch_device_default()  # device models currently live on
-        self._models_lock = threading.Lock()
+        self._models_lock = threading.Lock()   # L3: the model CPU<->CUDA move
+
+        # stream sessions (L1 over the dict, L2 per session)
+        self._sessions = {}
+        self._sessions_lock = threading.Lock()
+        self._session_ttl = _SESSION_TTL
+        self._last_reap = time.time()
 
         self._last_request_time = time.time()
         # Watchdog: park the (lazy) models back on CPU when idle,
@@ -194,6 +238,45 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
                 torch.cuda.empty_cache()
             except ImportError:
                 pass
+            self._reap_sessions()
+
+    def _reap_sessions(self):
+        """Drop stream sessions idle beyond the TTL (frees their cached
+        features).  A session with a request in flight is skipped this
+        cycle (L2 held) — same convention as tapnext."""
+        if not self._session_ttl or self._session_ttl <= 0:
+            return
+        now = time.time()
+        if now - self._last_reap < 30:
+            return
+        with self._sessions_lock:  # L1
+            for sid, sess in list(self._sessions.items()):
+                if now - sess.last_used <= self._session_ttl:
+                    continue
+                if sess.lock.locked():          # request in flight: retry next cycle
+                    continue
+                del self._sessions[sid]
+                logging.info(f"Reaped idle stream session {sid} "
+                             f"(idle {now - sess.last_used:.0f}s)")
+            self._last_reap = now
+
+    def _get_session(self, sid):
+        """Fetch-or-create the stream session (L1 only)."""
+        with self._sessions_lock:
+            sess = self._sessions.get(sid)
+            if sess is None:
+                sess = Session()
+                self._sessions[sid] = sess
+                logging.info(f"Stream session created: {sid} "
+                             f"(active: {len(self._sessions)})")
+            sess.last_used = time.time()
+            return sess
+
+    @staticmethod
+    def _reset_session(sess):
+        sess.features = []
+        sess.num_frames = 0
+        sess.last_used = time.time()
 
     def _get_models(self, extractor, max_keypoints, filter_threshold, device):
         """Return (extractor, matcher) for the LightGlue feature set
@@ -316,6 +399,82 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
             if "matches" in out else {}
         return out, extra
 
+    # -------------------------------------------------------------- stream
+    @staticmethod
+    def _feats_to_cpu(feats):
+        """Extractor dict (device tensors) -> CPU ndarrays, keys intact."""
+        out = {}
+        for k, v in feats.items():
+            t = v.detach().cpu() if hasattr(v, "cpu") else v
+            out[k] = np.asarray(t, dtype=np.float32)
+        return out
+
+    def _run_stream(self, img_bgr, spec, window, device, sess):
+        """One sliding-window step: extract the new frame's features, store
+        them in the session, and match the new frame against the last
+        ``window`` stored frames.
+
+        Returns (data_dict, config_extra).  ``sess`` (the caller's session)
+        is passed in, already locked (L2); this never touches the dict.
+        """
+        extractor, matcher = self._get_models(
+            spec["extractor"].lower(), spec["max_keypoints"],
+            spec["filter_threshold"], device)
+
+        import torch
+        with torch.no_grad():
+            new_feats = extractor.extract(self._img2tensor(img_bgr, device))
+
+        sess_new = self._feats_to_cpu(new_feats)
+        # newest -> oldest so "reference j" counts back from the previous
+        # frame; reference 1 is therefore the immediately-preceding frame.
+        refs = sess.features[-window:][::-1]
+        J = len(refs)
+        sess.features.append(sess_new)
+        if len(sess.features) > _STREAM_WINDOW_MAX:
+            del sess.features[:-_STREAM_WINDOW_MAX]
+        sess.num_frames += 1
+
+        def _kpts(f):
+            return np.asarray(f.get("keypoints"), dtype=np.float32).reshape(-1, 2)
+
+        def _feats_tensors(f):
+            return {k: torch.from_numpy(v).to(device) for k, v in f.items()}
+
+        out = {}
+        rows = [_kpts(r) for r in refs]     # row j-1 (0-based) = reference j
+        new_k = _kpts(sess_new)
+        rows.append(new_k)                  # row J-1 (0-based) = the new frame
+        out["keypoints"] = pad_and_stack(rows)
+        out["kp_counts"] = np.array([r.shape[0] for r in rows], dtype=np.int64)
+        extra = {"window": J, "num_frames": sess.num_frames}
+        if J == 0:
+            extra["first_frame"] = True
+            return out, extra
+
+        import torch
+        with torch.no_grad():
+            for j, ref in enumerate(refs, start=1):
+                # matches_j: column 0 -> reference j (keypoints row j-1),
+                # column 1 -> the new frame (keypoints row J-1).
+                res_m = matcher({"image0": _feats_tensors(ref),
+                                 "image1": _feats_tensors(sess_new)})
+                m = res_m.get("matches")
+                if isinstance(m, (list, tuple)):
+                    m = m[0]
+                t = m.detach().cpu() if hasattr(m, "cpu") else m
+                matches = np.asarray(t, dtype=np.float32).astype(np.int64).reshape(-1, 2)
+                out[f"matches_{j}"] = matches
+
+                conf = res_m.get("confidence", res_m.get("scores"))
+                if isinstance(conf, (list, tuple)):
+                    conf = conf[0]
+                if conf is not None:
+                    tc = conf.detach().cpu() if hasattr(conf, "cpu") else conf
+                    out[f"confidence_{j}"] = np.asarray(tc, dtype=np.float32).reshape(-1)
+                extra[f"num_matches_{j}"] = int(matches.shape[0])
+        return out, extra
+
     # ---------------------------------------------------------------- Process
     def Process(self, request, context):
         start_time = time.time()
@@ -334,13 +493,88 @@ class PipelineService(folder_wd_pb2_grpc.PipelineServiceServicer):
             if not isinstance(parameters, dict):
                 return _error("parameters must be an object")
 
-            # --- reset: plain no-op (this box is fully stateless) ---------
+            # --- reset: clears stream state (one session or all) --------
             if command == "reset":
-                return _done({"action": "reset"})
+                sid = parameters.get("session_id")
+                with self._sessions_lock:  # L1
+                    if sid is None:
+                        cleared = len(self._sessions)
+                        self._sessions.clear()
+                        logging.info(f"All stream sessions cleared ({cleared})")
+                    else:
+                        sid = str(sid)
+                        sess = self._sessions.get(sid)
+                        existed = sess is not None
+                        if sess is not None:
+                            with sess.lock:  # L2
+                                self._reset_session(sess)
+                        logging.info(f"Stream session reset: {sid} "
+                                     f"(existed: {existed})")
+                        return _done({"action": "reset", "session": sid,
+                                      "existed": existed})
+                return _done({"action": "reset", "sessions_cleared": cleared})
+
+            # --- list: active stream sessions (operator helper) ---------
+            if command == "list":
+                with self._sessions_lock:  # L1
+                    sessions = {sid: {"frames": sess.num_frames,
+                                     "idle_s": int(time.time() - sess.last_used)}
+                               for sid, sess in sorted(self._sessions.items())}
+                return _done({"action": "list", "sessions": sessions})
+
+            # --- stream: sliding-window step for one session ------------
+            if command == "stream":
+                sid = str(parameters.get("session_id") or _DEFAULT_SESSION)
+                window = int(_num(parameters, "window",
+                                  _STREAM_WINDOW_DEFAULT, int))
+                if not 1 <= window <= _STREAM_WINDOW_MAX:
+                    return _error(f"parameters.window must be in "
+                                  f"[1, {_STREAM_WINDOW_MAX}], got {window}")
+
+                images = (unwrap_value(request.data["images"])
+                          if "images" in request.data else None)
+                if isinstance(images, (bytes, bytearray)):
+                    images = [images]
+                if not images:
+                    return _empty_request()
+                if len(images) != 1:
+                    return _error(
+                        "stream takes exactly 1 new image per call "
+                        f"(got {len(images)}) — use 'match' for batches")
+
+                spec = _parse_match_parameters(parameters)
+                device = torch_device_default()
+                req_device = str(parameters.get("device") or "").strip().lower()
+                if req_device:
+                    device = req_device
+
+                img = self._decode_images(images)[0]
+                sess = self._get_session(sid)
+                with sess.lock:  # L2 — held across the whole step
+                    sess.last_used = time.time()
+                    data, extra = self._run_stream(
+                        img, spec, window, device, sess)
+
+                data = {key: wrap_value(np_to_bytes(arr))
+                        for key, arr in data.items()}
+                encoding = {key: "numpy" for key in data}
+                return _done(
+                    {
+                        "session": sid,
+                        "matcher": f"LightGlue ({spec['extractor'].lower()})",
+                        "feature_extractor": spec["extractor"],
+                        "max_keypoints": spec["max_keypoints"],
+                        "device": device,
+                        "requested_window": window,
+                        **extra,
+                        "runtime": time.time() - start_time,
+                    },
+                    data=data, encoding=encoding)
 
             if command != "match":
                 return _error(
-                    f"unknown command {command!r} (expected 'match' or 'reset')")
+                    f"unknown command {command!r} (expected one of: "
+                    f"match | stream | reset | list)")
 
             images = unwrap_value(request.data["images"]) if "images" in request.data else None
             if isinstance(images, (bytes, bytearray)):

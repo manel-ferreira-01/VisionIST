@@ -130,8 +130,92 @@ print("== 6. reset ==")
 s = section(call({"lightglue": {"command": "reset"}}))
 check("reset done", s.get("status") == "done" and s.get("action") == "reset", str(s))
 
+print("== 6b. reset with unknown session_id ==") 
+s = section(call({"lightglue": {"command": "reset",
+                               "parameters": {"session_id": "ghost"}}}))
+check("reset ok (existed false)", s.get("status") == "done" and s.get("existed") is False, str(s))
+
 print("== 7. legacy call without command ==")
 check("legacy ok", section(call({"lightglue": {"parameters": {}}}, [A, B])).get("status") == "done")
+
+def stream(params, img, sid="win1"):
+    """One stream step for a given session_id."""
+    return call({"lightglue": {"command": "stream",
+                               "parameters": {**params, "session_id": sid}}}, [img])
+
+print("\n== 8. stream: sliding window (clear all sessions first) ==")
+section(call({"lightglue": {"command": "reset"}}))
+
+# frame 1 -> first_frame, stored
+r = stream({}, A)
+s = section(r)
+check("s1 done", s.get("status") == "done", str(s))
+check("s1 first_frame", s.get("first_frame") is True, str(s))
+check("s1 num_frames", s.get("num_frames") == 1)
+check("s1 no matches_1", "matches_1" not in r.data)
+
+# frame 2 -> one reference (matches_1)
+r = stream({"window": 3}, B)
+s = section(r)
+check("s2 done", s.get("status") == "done", str(s))
+check("s2 num_frames", s.get("num_frames") == 2, str(s))
+check("s2 window", s.get("window") == 1, str(s.get("window")))
+if "matches_1" in r.data:
+    m = np_of(r, "matches_1")
+    kp = np_of(r, "keypoints")
+    check("s2 rows (1 ref + new)", kp.shape[0] == 2, str(kp.shape))
+    check("s2 matches_1 idx", bool((m[:, 0] < kp[0].shape[0]).all() and (m[:, 1] < kp[1].shape[0]).all()), str(m.shape))
+    print(f"      matches_1={m.shape} kp rows={kp.shape[0]}")
+else:
+    failures.append("s2 matches_1 missing")
+
+# frame 3 (same B) -> two references now inside the window
+r = stream({"window": 3}, B)
+s = section(r)
+check("s3 done", s.get("status") == "done", str(s))
+check("s3 window", s.get("window") == 2, str(s.get("window")))
+check("s3 num_frames", s.get("num_frames") == 3)
+for j in (1, 2):
+    check(f"s3 matches_{j}", f"matches_{j}" in r.data)
+kp = np_of(r, "keypoints") if "keypoints" in r.data else None
+check("s3 kp rows (2 refs + new)", kp is not None and kp.shape[0] == 3, str(None if kp is None else kp.shape))
+if kp is not None:
+    m1 = np_of(r, "matches_1"); m2 = np_of(r, "matches_2")
+    check("s3 m1 idx (ref1=row0, new=row2)", bool((m1[:, 0] < kp[0].shape[0]).all() and (m1[:, 1] < kp[2].shape[0]).all()))
+    check("s3 m2 idx (ref2=row1, new=row2)", bool((m2[:, 0] < kp[1].shape[0]).all() and (m2[:, 1] < kp[2].shape[0]).all()))
+
+# window bounds
+check("s window>max error", section(call({"lightglue": {"command": "stream",
+                                                         "parameters": {"window": 99, "session_id": "win1"}}}, [A])).get("status") == "error")
+# 2 images rejected on stream
+check("s 2 images error", section(call({"lightglue": {"command": "stream", "parameters": {"session_id": "win1"}}}, [A, B])).get("status") == "error")
+# two independent sessions don't interfere
+r = stream({"window": 3}, A, sid="win2")
+check("s other session first_frame", section(r).get("first_frame") is True, str(section(r)))
+
+# list now shows both sessions
+s = section(call({"lightglue": {"command": "list"}}))
+sess = s.get("sessions") or {}
+check("list has win1", "win1" in sess and sess["win1"].get("frames") == 3, str(s))
+check("list has win2", "win2" in sess, str(s))
+
+# reset one session clears just that one
+s = section(call({"lightglue": {"command": "reset", "parameters": {"session_id": "win1"}}}))
+check("reset win1", s.get("status") == "done" and s.get("existed") is True, str(s))
+r = stream({}, A)
+s = section(r)
+check("win1 restarted (first_frame)", s.get("first_frame") is True and s.get("num_frames") == 1, str(s))
+# win2 still intact
+r = stream({}, B, sid="win2")
+s = section(r)
+check("win2 still streaming", s.get("first_frame") is not True and s.get("num_frames") == 2, str(s))
+
+# cleanup: clear all
+# cleanup: clear all
+s = section(call({"lightglue": {"command": "reset"}}))
+check("clear all", s.get("status") == "done" and s.get("sessions_cleared") is not None, str(s))
+s = section(call({"lightglue": {"command": "list"}}))
+check("list empty after clear", (s.get("sessions") or {}) == {}, str(s))
 
 print()
 print("FAIL -- " + "; ".join(failures) if failures else "PASS -- all in-process cases ok")
