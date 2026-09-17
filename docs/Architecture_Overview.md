@@ -36,10 +36,9 @@ per-box) and a `data` map of named, typed values (images, tensors, blobs).
 Full request/response contract: see
 [gRPC_Services_Reference](gRPC_Services_Reference.md).
 
-One box predates the shared contract and uses an extra RPC (`opencv_box`'s
-`similarity_check`); it still moves `Envelope`s around and
-can be called through `boxes_client.run(..., method=...)` where the client
-vendored proto allows it.
+(All standard boxes — including `opencv_box`, which used to carry an
+extra `similarity_check` RPC — now serve the single shared `Process` RPC;
+box-specific behaviour is selected with a `command` field.)
 
 ## Box layout (every box is the same shape)
 
@@ -92,8 +91,9 @@ after *any* GPU use: that is the CUDA context + cuDNN/cuBLAS workspaces,
 inherent to a process that initialized CUDA. It is not a leak and it does not
 grow with traffic.
 
-`tapnext_tracker` and `opencv_box` load straight to CUDA at startup when
-available (they keep state or run per-frame); `vggt` uses the same lazy
+`tapnext_tracker` loads straight to CUDA at startup when available (it runs
+per-frame); `opencv_box` does the same lazy loading for its LightGlue models
+(created on first use, parked on CPU when idle); `vggt` uses the same lazy
 in-place moves (its 1B weights come from the baked image or an on-startup
 download — see its README). All variants respect an explicit
 `parameters.device` in the request when provided.

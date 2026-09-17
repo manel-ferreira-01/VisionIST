@@ -40,7 +40,7 @@ docker compose down           # stop
 | textembedding | 9062    | `sbert`        | text embeddings |
 | tapnext     | 9063      | `tapnext`      | point tracking (stateful; `reset` supported) |
 | lang_segm   | 9064      | `lang_sam`     | text-guided segmentation |
-| opencv      | 9065      | `opencv`       | feature matching (Process), similarity (similarity_check) |
+| opencv      | 9065      | `opencv`       | feature matching + frame gating — `match` / `similarity_check` / `reset` commands on `Process` |
 | vggt        | 9066      | `vggt`         | 3D reconstruction (points/depth/cameras + GLB) — heavy image, ~12 GB pull |
 | moge        | 9067      | `moge`         | MoGe-3 single-view geometry (metric depth/points/normals) — CUDA-only |
 | yolo        | 9068      | `yolo`         | YOLO detection **+ tracking** on images and/or a decoded video (ultralytics; per-session track ids — `session_id`/`reset`/`list` like tapnext) |

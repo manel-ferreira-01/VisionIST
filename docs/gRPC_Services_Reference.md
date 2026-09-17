@@ -67,7 +67,7 @@ Use them; don't hand-roll the oneof.
 | clip | `clip` | stateless |
 | textEmbedding | `sbert` | stateless |
 | lang_segm | `lang_sam` | aliases accepted: `lang_segm`, `aispgradio`, or the legacy flat form |
-| opencv_box | `opencv` | `Process` + `similarity_check` |
+| opencv_box | `opencv` | `match` (default) / `similarity_check` (stateful — reference frame only, cleared by `reset`) / `reset` as commands of `Process`; `match` is stateless (1 image: extraction, 2: + matches & fundamental matrix); response declares `keypoints`/`descriptors`/`matches_inliers_a`/`matches_inliers_b`/`fundamental_matrix` as `numpy` (np.save blobs), similarity frames as `identity` |
 | vggt | `vggt` | stateless; legacy `aispgradio` section / flat form accepted; response declares per-field `encoding` (torch tensors, identity GLB) |
 | moge_box | `moge` | stateless; **CUDA-only** (`cpu` rejected); outputs a per-image dict — `points (H,W,3)` / `depth (H,W)` / `normal (H,W,3)` / `intrinsics (3,3)` / `mask (H,W)` (OpenCV camera coords), encoding `zstd_pickle` |
 | yolo | `yolo` | **multi-session tracker state** (tapnext contract): always tracks — every box in `detections` carries a per-session `track_id` (stable within a `session_id`, independent across sessions); `reset` scopes to the calling session, `list` lists active ones; `data.images` and/or a single decoded `data.video` (`frame_step`/`max_frames`); response declares `detections` as `json`, `annotated` as `identity` |
@@ -123,7 +123,7 @@ Codec vocabulary (generic names, pure `bytes -> object`; full design in
 | `identity`    | raw bytes                        | `bytes` (unchanged; the default) |
 | `json`        | UTF-8 JSON                       | `list`/`dict`                 |
 | `torch`       | `torch.save()` tensor / dict     | `Tensor` / `dict[Tensor]`     |
-| `numpy`       | raw numeric buffer (float32)     | `np.ndarray`                  |
+| `numpy`       | `numpy.save` (`.npy`) blob, or plain float32 buffer (legacy) | `np.ndarray`                  |
 | `zstd_pickle` | `zstd.compress(pickle.dumps(...))` | decoded Python (usually `list`) |
 
 `boxes_client` decodes declared fields directly (`res.encoding` exposes
@@ -149,10 +149,8 @@ Standard boxes answer `Process` with a namespaced status:
 - **`empty_request`** — the `images` field was missing/empty.
 - **`error`** — missing config, no prompt, or inference failure; the human
   readable reason is in `"error"`.
-- **Config-only echo** — some boxes (opencv) forward
-  config-only envelopes without images and echo them back unchanged; callers
-  treat an empty `data` as "no work, continue". Standard stateless boxes
-  (clip, sbert, lang_sam, vggt) answer those with `status: empty_request` instead.
+  Config-only envelopes (a caller's "no work, continue" ping) are answered
+  by every standard box with `status: empty_request`.
 
 ## Devices & GPU behaviour (as deployed)
 

@@ -33,12 +33,13 @@ so *adding a box = one YAML file*, never code.
 | textEmbedding (sbert) | ✅ | standard envelope |
 | vggt | ✅ | standard envelope (legacy flat config, supported via `flat_config`) |
 | yolo | ✅ | standard envelope; detection over images and/or a decoded video |
-| **opencv_box** | ⏸ **skipped** | serves `similarity_check` as a second RPC |
+| **opencv_box** | ⏸ **no definition yet** | now a standard envelope box (`match` / `similarity_check` / `reset` on `Process`) — YAML definition still to be added |
 
 The skip is deliberate: the webui stays **contract-only** (one stub, `Process`,
-for every box). When opencv_box migrates to the shared envelope, drop its YAML
-definition into `boxes/` — no code changes needed. Defs that request a
-non-`Process` `method` are refused with a clear error (`build_call`).
+for every box). opencv_box now speaks the shared envelope (`match` /
+`similarity_check` / `reset` commands); its YAML definition is the only thing
+missing — drop it into `boxes/` when wanted, no code changes needed. Defs that
+request a non-`Process` `method` are refused with a clear error (`build_call`).
 
 ## Quick start
 

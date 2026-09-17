@@ -31,8 +31,7 @@ That guessing is the agnosticism leak. Two concrete failures:
 2. **Opaque.** A caller can't tell what a `bytes` field means without knowing
    the box. That's per-box knowledge leaking into the caller, not the contract.
 
-`tapnext`/`clip`/`sbert` (torch.save) and `opencv` (numpy) happen to be decoded
-correctly today — by luck of the guess order, not by contract.
+`tapnext`/`clip`/`sbert` (torch.save) are now decoded **by contract** — they declare their `encoding`. (`opencv` did the same after its migration to the standard envelope.) The guess chain survives only for boxes that never declare one.
 
 ## 2. The principle (already agreed, build on it)
 
@@ -79,7 +78,7 @@ the parsed config (top level, then each top-level section, shallowly) for an
 | `identity`    | raw bytes                            | `bytes` (unchanged)        | default / anything       |
 | `json`        | UTF-8 JSON                           | `list`/`dict`              | (any JSON payload)       |
 | `torch`       | `torch.save()` tensor / dict         | `Tensor` / `dict[Tensor]`  | tapnext, clip, sbert     |
-| `numpy`       | raw numeric buffer (float32)         | `np.ndarray`               | opencv (`np_to_bytes`)   |
+| `numpy`       | `numpy.save` (`.npy`) blob, or raw float32 buffer (legacy) | `np.ndarray` | opencv (`np_to_bytes`)   |
 | `zstd_pickle` | `zstd.compress(pickle.dumps(list))`  | decoded Python (usually `list`) | **lang_segm** (`results`) |
 
 Each codec is a self-contained function with **no box name and no global state**.
@@ -144,10 +143,15 @@ section). Minimal set — start with the two that are actually wrong today:
 - **tapnext** (`src/tapnext_service.py`, `status:done`): add
   `"encoding": {"tracks":"torch","visibles":"torch","observation_matrix":"torch"}`.
 
-Optional (currently decoded by luck) — for robustness, same one-liner:
+Optional (currently decoded by the legacy chain) — for robustness, same one-liner:
 - **clip**: `"encoding": {"image_emb":"torch","text_emb":"torch","similarity":"torch"}`.
 - **sbert/textEmbedding**: `"encoding": {"embeddings":"torch","similarities":"torch"}`.
-- **opencv**: `"encoding": {"keypoints":"numpy", ...}` (only where the value is a raw float32 buffer; `descriptors`/`matches_*` as they are serialized — inspect the box to name the codec correctly).
+
+Already declared (reference):
+- **opencv**: `"encoding": {"keypoints": "numpy", "descriptors": "numpy",
+  "matches_inliers_a": "numpy", "matches_inliers_b": "numpy",
+  "fundamental_matrix": "numpy"}` (np.save blobs), plus `"images": "identity"`
+  on the `similarity_check` echo.
 
 > Boxes that add `encoding` only change their *self-description*; a new client
 > decodes it, an old client ignores the extra key. Safe and reversible. Rebuild
