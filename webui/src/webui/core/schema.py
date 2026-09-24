@@ -38,6 +38,9 @@ VISUALIZERS: frozenset[str] = frozenset({
     "overlay",        # base image + typed layers (box/mask/point/flow)
     "matrix",         # similarity/heat matrices
     "field_map",      # per-item numeric map as an image (H×W heat or H×W×3 RGB)
+    "flow_field",     # dense 2-D vector field (u,v per pixel, e.g. optical flow)
+                       # -> quiver over the first base image (def `base`), fwd/bwd
+                       # fields selectable
     "tensor",         # shape/dtype/summary of a numeric array
     "glb",            # glTF binary 3D model (three.js)
     "video",          # video file artifact (mp4/…) -> native <video controls>

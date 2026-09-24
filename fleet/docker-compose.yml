@@ -111,6 +111,17 @@ services:
     environment: [ PORT=8061 ]
     restart: unless-stopped
 
+  # UniMatch — dense optical flow / stereo disparity / metric depth.
+  # Ships the flow checkpoint; stereo/depth checkpoints via parameters.model.
+  unimatch:
+    <<: *gpu
+    build: { context: ../images/unimatch,      dockerfile: docker/Dockerfile }
+    image: visionist-local/unimatch
+    container_name: visionist-unimatch
+    ports: ["9070:8061"]
+    environment: [ PORT=8061 ]
+    restart: unless-stopped
+
   # =========================================================================
   # visionist-webui — the browser front-end over the boxes (SPA at / + /api/*)
   # Runs on the same compose network, so it reaches boxes by SERVICE NAME on
@@ -135,6 +146,7 @@ services:
       - vggt
       - moge
       - yolo
+      - unimatch
     restart: unless-stopped
     labels:
       # ---- DockTail: advertise this container as a Tailscale service --------

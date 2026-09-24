@@ -15,7 +15,8 @@ def reg():
     return load_registry(BOXES_DIR)
 
 
-EXPECTED_IDS = {"clip", "tapnext", "lang_sam", "sbert", "vggt", "moge", "yolo"}
+EXPECTED_IDS = {"clip", "tapnext", "lang_sam", "sbert", "vggt", "moge", "yolo",
+                "unimatch"}
 
 
 def test_out_of_scope_boxes_are_absent(reg):
@@ -139,6 +140,25 @@ def test_yolo_detection_def(reg):
     tabler = next(r for r in d.results if r.field == "detections")
     assert tabler.params.get("filename") == "yolo-detections.json"
     assert d.input_mosaic is False   # annotated result already shows the input
+    assert d.results[-1].field == "*"
+
+
+def test_unimatch_is_dense_estimation(reg):
+    d = reg.get("unimatch")
+    assert d.box_key == "unimatch"
+    assert d.command.default == "flow"
+    assert set(d.command.values) == {"flow", "stereo", "reset"}
+    # booleans (pred_bidir_flow / fwd_bwd_check) are deliberately NOT in the
+    # form: the wire passes parameters raw, so a select's "false" string would
+    # read as truthy on the box side (same rule as moege's fp16)
+    params = {p.key for p in d.parameters}
+    assert params == {"model", "inference_size", "padding_factor"}
+    viz = {r.field: r.visualizer for r in d.results if r.field != "*"}
+    assert viz["flow"] == "flow_field"
+    assert viz["disparity"] == "field_map"
+    assert viz["depth"] == "field_map"
+    flow = next(r for r in d.results if r.field == "flow")
+    assert flow.base == "images"   # quiver over the first uploaded image
     assert d.results[-1].field == "*"
 
 

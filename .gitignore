@@ -3,6 +3,7 @@
 **/._*
 **/.devcontainer
 **/*.pt
+**/*.pth
 **/*.pyc
 **/*.jpg
 **/*.mp4
@@ -15,6 +16,8 @@
 !images/opencv_box/test/01.jpg
 !images/tapnext_tracker/test/apple.mp4
 !images/moge_box/test/test.jpg
+!images/unimatch/test/flow_0.jpg
+!images/unimatch/test/flow_1.jpg
 .cache/
 output/
 **/test/output_*.png

@@ -48,9 +48,13 @@ def test_defs_endpoint_shape(client):
     r = client.get("/api/defs")
     assert r.status_code == 200
     body = r.json()
-    assert len(body["defs"]) == 7     # opencv out of scope (pre-contract)
+    assert len(body["defs"]) >= 7     # opencv out of scope (pre-contract)
+    assert {d["id"] for d in body["defs"]} >= {
+        "clip", "tapnext", "lang_sam", "sbert", "vggt", "moge", "yolo"}
+    assert "opencv" not in {d["id"] for d in body["defs"]}
     assert "image_upload" in body["vocabulary"]["widgets"]
     assert "overlay" in body["vocabulary"]["visualizers"]
+    assert "flow_field" in body["vocabulary"]["visualizers"]
 
 
 # ----------------------------------------------------------- the happy path

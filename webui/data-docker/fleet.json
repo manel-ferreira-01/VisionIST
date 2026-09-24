@@ -8,44 +8,8 @@
       "note": null,
       "added": 1790256113.4216843,
       "last_probe": {
-        "at": 1790257618.5805476,
+        "at": 1790259386.5486336,
         "addr": "clip:8061",
-        "service": "pipeline.PipelineService",
-        "methods": [
-          "Process"
-        ],
-        "reflection": true,
-        "reachable": true
-      }
-    },
-    {
-      "id": "sbert",
-      "name": "sbert",
-      "addr": "textembedding:8061",
-      "def_id": "sbert",
-      "note": null,
-      "added": 1790256113.4216888,
-      "last_probe": {
-        "at": 1790257618.5860739,
-        "addr": "textembedding:8061",
-        "service": "pipeline.PipelineService",
-        "methods": [
-          "Process"
-        ],
-        "reflection": true,
-        "reachable": true
-      }
-    },
-    {
-      "id": "tapnext",
-      "name": "tapnext",
-      "addr": "tapnext:8061",
-      "def_id": "tapnext",
-      "note": null,
-      "added": 1790256113.4216912,
-      "last_probe": {
-        "at": 1790257618.5902114,
-        "addr": "tapnext:8061",
         "service": "pipeline.PipelineService",
         "methods": [
           "Process"
@@ -62,26 +26,8 @@
       "note": null,
       "added": 1790256113.421693,
       "last_probe": {
-        "at": 1790257618.592195,
+        "at": 1790259386.5608346,
         "addr": "lang_sam:8061",
-        "service": "pipeline.PipelineService",
-        "methods": [
-          "Process"
-        ],
-        "reflection": true,
-        "reachable": true
-      }
-    },
-    {
-      "id": "vggt",
-      "name": "vggt",
-      "addr": "vggt:8061",
-      "def_id": "vggt",
-      "note": null,
-      "added": 1790256113.4216952,
-      "last_probe": {
-        "at": 1790257618.5939708,
-        "addr": "vggt:8061",
         "service": "pipeline.PipelineService",
         "methods": [
           "Process"
@@ -98,8 +44,80 @@
       "note": null,
       "added": 1790256113.4216971,
       "last_probe": {
-        "at": 1790257618.5951908,
+        "at": 1790259386.5709162,
         "addr": "moge:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "tapnext",
+      "name": "tapnext",
+      "addr": "tapnext:8061",
+      "def_id": "tapnext",
+      "note": null,
+      "added": 1790256113.4216912,
+      "last_probe": {
+        "at": 1790259386.5581665,
+        "addr": "tapnext:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "sbert",
+      "name": "sbert",
+      "addr": "textembedding:8061",
+      "def_id": "sbert",
+      "note": null,
+      "added": 1790256113.4216888,
+      "last_probe": {
+        "at": 1790259386.551406,
+        "addr": "textembedding:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "unimatch",
+      "name": "unimatch",
+      "addr": "unimatch:8061",
+      "def_id": "unimatch",
+      "note": "unified flow/stereo/depth",
+      "added": 1790263679.778584,
+      "last_probe": {
+        "at": 1790264003.6980996,
+        "addr": "unimatch:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "vggt",
+      "name": "vggt",
+      "addr": "vggt:8061",
+      "def_id": "vggt",
+      "note": null,
+      "added": 1790256113.4216952,
+      "last_probe": {
+        "at": 1790259386.564208,
+        "addr": "vggt:8061",
         "service": "pipeline.PipelineService",
         "methods": [
           "Process"
@@ -116,7 +134,7 @@
       "note": null,
       "added": 1790256113.421699,
       "last_probe": {
-        "at": 1790257618.5963035,
+        "at": 1790259386.5699995,
         "addr": "yolo:8061",
         "service": "pipeline.PipelineService",
         "methods": [

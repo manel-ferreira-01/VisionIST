@@ -20,6 +20,7 @@ import { DataTable } from "../viz/DataTable";
 import { ImageGrid } from "../viz/ImageGrid";
 import { MatrixHeatmap } from "../viz/MatrixHeatmap";
 import { FieldMap } from "../viz/FieldMap";
+import { FlowField } from "../viz/FlowField";
 import { PointCloud } from "../viz/PointCloud";
 import { TensorView } from "../viz/TensorView";
 import { OverlayViz } from "../viz/OverlayViz";
@@ -705,6 +706,14 @@ function ResultBlock({
           title={title}
         />
       );
+    }
+    case "flow_field": {
+      // dense (u,v per pixel) vector field (e.g. optical flow) -> quiver over
+      // the first uploaded input image (def `base`), magnitude-heat toggle.
+      const base = rd.base && current && (current.images[0] ?? null)
+        ? fileUrl(current.images[0])
+        : null;
+      return <FlowField value={v} base={base ?? null} title={title} />;
     }
     case "tensor":
       return <TensorView value={v} title={title} />;

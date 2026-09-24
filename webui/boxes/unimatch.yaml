@@ -1,0 +1,69 @@
+# UniMatch — dense geometric estimation (unified optical flow / stereo / depth).
+# Authoritative request shape: ../../images/unimatch/README.md
+id: unimatch
+name: "UniMatch · optical flow & stereo disparity"
+box_key: unimatch
+docs: ../../images/unimatch/README.md
+note: >
+  Two-image dense estimation from one unified backbone.  Pick the command,
+  then the matching checkpoint under `model`:
+  flow needs the gmflow checkpoint and two consecutive frames of a scene;
+  stereo needs the gmstereo checkpoint and a rectified left/right pair.
+  Inputs larger than ~1.6 MP are auto-downscaled by the box (response
+  config says auto_resized: true) unless you pass inference_size.
+input_mosaic: false   # the flow/stereo panels already show the inputs (base + result)
+
+inputs:
+  - field: images
+    widget: image_upload
+    kind: bb
+    multiple: true
+    required: true
+    helper: upload exactly two images — first/left, then second/right
+    constraint: >
+      flow: two consecutive frames of the same camera;
+      stereo: a calibrated, rectified stereo pair (left, then right)
+
+command:
+  values: [flow, stereo, reset]
+  default: flow
+
+parameters:
+  - key: model
+    widget: select
+    values:
+      - "gmflow-scale1-mixdata-train320x576-4c3a6e9a.pth"   # flow (baked into the image)
+      - "gmstereo-scale1-sceneflow-124a438f.pth"            # stereo
+      - "gmdepth-scale1-scannet-d3d1efb5.pth"               # depth (not in the form's commands)
+    default: "gmflow-scale1-mixdata-train320x576-4c3a6e9a.pth"
+    placeholder: >
+      gmflow = optical flow, gmstereo = stereo disparity, gmdepth = depth —
+      picked per command; downloaded on first use
+
+  - key: inference_size
+    widget: json
+    placeholder: "[height, width] — e.g. [480, 854]; empty = auto size (capped at ~1.6 MP)"
+
+  - key: padding_factor
+    widget: number
+    default: 16
+
+results:
+  - field: flow
+    visualizer: flow_field
+    caption: "optical flow — first image → second"
+    base: images      # first uploaded image as the quiver background
+  - field: occ_fwd
+    visualizer: field_map
+    caption: "forward-occlusion mask (1 = occluded; needs pred_bidir_flow)"
+  - field: occ_bwd
+    visualizer: field_map
+    caption: "backward-occlusion mask (1 = occluded; needs pred_bidir_flow)"
+  - field: disparity
+    visualizer: field_map
+    caption: "stereo disparity (px)"
+  - field: depth
+    visualizer: field_map
+    caption: "depth map (depth command only)"
+  - field: "*"
+    visualizer: json
