@@ -2,8 +2,8 @@
 
 `boxes_walkthrough.ipynb` runs the raw `visionist_client` (no webui) against
 the local docker fleet: **yolo** detection on a video, **tapnext** point
-tracking + observation matrix, **lightglue** feature matching (saved
-renderings: `lightglue_box_match.png`, `lightglue_match.png`).
+tracking + observation matrix, **lightglue** feature matching (rendered
+inline when you run it).
 
 Run it with the fleet up (`cd fleet && docker compose up -d`), boxes on
 their default host ports 9061–9069:
