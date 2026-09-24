@@ -32,3 +32,8 @@ webui/data/
 # pytest cache
 .pytest_cache/
 
+# Build / packaging artifacts
+*.whl
+build/
+__pycache__/
+
