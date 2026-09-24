@@ -56,33 +56,11 @@ python supervisor_demo.py           # guided demo with decoded output per box
 
 **Access**
 - webui (local): **http://localhost:8080** (SPA at `/`, API at `/api/*`)
-- webui (tailnet): **https://webui.<your-tailnet>.ts.net** — via the `docktail`
-  service; see [Exposing over Tailscale](#exposing-the-webui-over-tailscale-docktail) below
 - boxes (direct): host ports **9061–9069**, or by service name on the
   `visionist-fleet` network — see the per-box READMEs
 
 **Stop it all:** `cd fleet && docker compose down`
 (or `docker compose stop` to keep containers for a faster re-`up`).
-
-### Exposing the webui over Tailscale (DockTail)
-
-The compose stack ships a [`docktail`](https://docktail.org) service that
-advertises the **webui container** as a native Tailscale service (HTTPS with
-auto-TLS, self-healing across restarts/IP changes). Enable it once:
-
-1. OAuth creds in `fleet/.env` (client scoped to the host tag, e.g.
-   `tag:service-host`, granting `Services: Write`):
-   ```dotenv
-   TAILSCALE_OAUTH_CLIENT_ID=...
-   TAILSCALE_OAUTH_CLIENT_SECRET=...
-   ```
-2. `cd fleet && docker compose up -d docktail`, then **approve the `webui`
-   service** once in the Tailscale admin console (Services tab).
-3. Open `https://webui.<your-tailnet>.ts.net/` from any device on the tailnet.
-
-(Without creds, DockTail still advertises locally — you create/approve the
-service by hand. Tags must be letters/numbers/**dashes**; see
-[docktail.org/docs](https://docktail.org/docs/).)
 
 Or run a single box yourself (full instructions in
 [docs/Quick_Start_Guide.md](docs/Quick_Start_Guide.md)):
