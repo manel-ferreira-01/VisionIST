@@ -94,7 +94,7 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <a className="brand" href="#/fleet" style={{ color: "var(--fg)", textDecoration: "none" }}>
-          📦 boxes <small>webui · contract-only fleet console</small>
+          📦 visionist <small>webui · contract-only fleet console</small>
         </a>
         {defs && (
           <nav>
