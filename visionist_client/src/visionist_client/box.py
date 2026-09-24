@@ -1,26 +1,26 @@
-"""``Box`` -- a thin client for one deployed box (a box = a gRPC AI service).
+"""``Visionist`` -- a thin client for one deployed box (a box = a gRPC AI service).
 
 Give it an address (``host:port``) and it can send an ``Envelope`` and get a
 decoded ``Result`` back via the shared ``pipeline.PipelineService`` interface.
 
-Local and remote boxes are identical: ``Box("localhost:8061")`` vs
-``Box("10.0.0.5:8061")``. No registry, no central server -- the client dials
+Local and remote boxes are identical: ``Visionist("localhost:8061")`` vs
+``Visionist("10.0.0.5:8061")``. No registry, no central server -- the client dials
 the box directly (boxes are push-style servers), which preserves the
 distributed nature of the fleet.
 
 The core stays **box-agnostic**: it knows how to build and send an ``Envelope``
 and read a ``Result`` back, but it knows no box, field, or model.  Box-specific
 conveniences (one per box, e.g. a point-tracking helper) live in
-:mod:`boxes_client.conveniences`, are built purely on top of :meth:`Box.run`,
+:mod:`visionist_client.conveniences`, are built purely on top of :meth:`Visionist.run`,
 and are never imported by the core.
 
 Core call surface
 -----------------
-:meth:`Box.run`    -- the generic workhorse: ``run(data=..., config=..., method="Process")``.
+:meth:`Visionist.run`    -- the generic workhorse: ``run(data=..., config=..., method="Process")``.
                       No assumption about field names or payload types.
-:meth:`Box.reset`  -- clear server-side state (``{"<box>": {"command": "reset"}}``).
-:meth:`Box.call`   -- send an already-built ``Envelope`` via ``Process``.
-:meth:`Box.info`   -- reachability + gRPC-reflection self-description probe.
+:meth:`Visionist.reset`  -- clear server-side state (``{"<box>": {"command": "reset"}}``).
+:meth:`Visionist.call`   -- send an already-built ``Envelope`` via ``Process``.
+:meth:`Visionist.info`   -- reachability + gRPC-reflection self-description probe.
 """
 
 
@@ -36,7 +36,7 @@ _SERVICE = "pipeline.PipelineService"
 _DEFAULT_PORT = 8061
 
 
-class Box:
+class Visionist:
     """A client for a single box.
 
     Parameters
@@ -136,7 +136,7 @@ class Box:
         if not callable(fn):
             known = sorted(n for n in dir(self._stub) if not n.startswith("_"))
             raise AttributeError(
-                f"Box has no RPC method {method!r}. "
+                f"Visionist has no RPC method {method!r}. "
                 f"This stub defines: {known} (only 'Process' is guaranteed; "
                 f"other methods depend on the box's own .proto)."
             )
@@ -157,7 +157,7 @@ class Box:
         ----------
         data:
             Mapping of ``field_name -> value`` written into ``Envelope.data``.
-            Values follow :mod:`boxes_client.envelope` coercion rules:
+            Values follow :mod:`visionist_client.envelope` coercion rules:
             ``bytes`` / ``pathlib.Path`` -> bytes; ``str`` -> literal string;
             ``int`` -> float; lists of those -> ``BytesList`` / ``StringList``
             / ``FloatList``.
@@ -189,8 +189,8 @@ class Box:
         key = config_key or self.config_key
         if not key:
             raise ValueError(
-                "Box.reset(): no config_key given. Construct the Box with "
-                "config_key=<box> or call Box.reset(config_key=<box>).")
+                "Visionist.reset(): no config_key given. Construct the Visionist with "
+                "config_key=<box> or call Visionist.reset(config_key=<box>).")
         return self._send(_env.reset_envelope(key), "Process")
 
     # Back-compat alias: low-level "I already built the Envelope" call.

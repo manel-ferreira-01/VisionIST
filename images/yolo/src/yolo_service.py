@@ -39,7 +39,7 @@ checkpoint per call (fresh ones download on first use, into the container
 workspace).
 
 Payloads: ``detections`` is JSON (declared via the ``encoding`` contract
-key so ``boxes_client`` decodes it); ``annotated`` is a list of JPEG bytes
+key so ``visionist_client`` decodes it); ``annotated`` is a list of JPEG bytes
 (declared ``identity``); a video input additionally yields
 ``annotated_video`` — the annotated frames re-encoded as one MP4 (H.264
 when PyAV is available so the browser's ``<video>`` can play it, mp4v
@@ -797,7 +797,7 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
                         "num_detections": num_detections,
                         "tracked": True,
                         "num_tracks": num_tracks,
-                        # Declared payload encoding (generic boxes_client
+                        # Declared payload encoding (generic visionist_client
                         # contract): JSON detection records, raw JPEG bytes.
                         "encoding": encoding,
                         **extra_status,

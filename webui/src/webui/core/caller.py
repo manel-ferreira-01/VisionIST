@@ -1,12 +1,12 @@
 """Assemble an Envelope call from a box definition + a wire request, and
 execute it against a box.
 
-Design (mirrors ``boxes_client``):
+Design (mirrors ``visionist_client``):
 
 * :func:`build_call` is **pure** — it only knows the definition, the
   request, and upload tokens.  No network.  Fully unit-testable.
 * :func:`execute` is the only function that touches the wire: only the
-  contract RPC ``Process`` via ``boxes_client.Box``.  Boxes that still serve
+  contract RPC ``Process`` via ``visionist_client.Visionist``.  Boxes that still serve
   bespoke RPCs (opencv_box) are out of scope until they migrate to
   the shared envelope — :func:`build_call` refuses non-``Process`` methods
   with a clear error.
@@ -142,7 +142,7 @@ def build_call(defn: BoxDef, req: CallRequest, store: ArtifactStore) -> CallSpec
             f"method {method!r} is not the shared contract RPC. Box "
             f"{defn.id!r} has not migrated to the envelope (Process) contract "
             f"yet — support lands when the box does (see the 'Method dispatch "
-            f"caveat' in the boxes_client README).",
+            f"caveat' in the visionist_client README).",
             {"method": method, "def_id": defn.id},
         )
 
@@ -248,7 +248,7 @@ def build_call(defn: BoxDef, req: CallRequest, store: ArtifactStore) -> CallSpec
 # --------------------------------------------------------------------------
 
 def execute(spec: CallSpec, address: str, defn: BoxDef,
-            timeout: float = 600.0) -> "Result":  # noqa: F821 (boxes_client.Result)
+            timeout: float = 600.0) -> "Result":  # noqa: F821 (visionist_client.Result)
     """Send :class:`CallSpec` to the box at ``address`` and return the
     client's decoded :class:`Result`.
 
@@ -258,9 +258,9 @@ def execute(spec: CallSpec, address: str, defn: BoxDef,
     if spec.method != "Process":
         raise CallBuildError(
             f"box {defn.id!r} cannot be called via {spec.method!r} (pre-contract box)")
-    from boxes_client import Box
+    from visionist_client import Visionist
 
-    with Box(address, config_key=defn.box_key, timeout=timeout) as box:
+    with Visionist(address, config_key=defn.box_key, timeout=timeout) as box:
         return box.run(
             data=spec.data,
             config=spec.config,

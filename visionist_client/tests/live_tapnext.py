@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Live smoke test: point ``boxes_client.Box`` at a running tapnext box.
+"""Live smoke test: point ``visionist_client.Visionist`` at a running tapnext box.
 
 Start a tapnext box on ``localhost:8061`` (or set ``BOX_HOST``), then:
 
-    BOX_HOST=localhost:8061 python boxes_client/tests/live_tapnext.py
+    BOX_HOST=localhost:8061 python visionist_client/tests/live_tapnext.py
 
 It loads a handful of frames from the bundled ``apple.mp4`` and drives the box
 two ways, to prove both call paths:
 
   * ``trace(box, ...)`` -- the tapnext *convenience* (images -> tracks), an
                            optional layer over the generic API.
-  * ``Box.run(...)``    -- the *generic* API (explicit data/config/method),
+  * ``Visionist.run(...)``    -- the *generic* API (explicit data/config/method),
                            called by hand with the very same envelope.
 
 Exits 0 on success, non-zero otherwise.
@@ -20,12 +20,12 @@ import os
 import sys
 
 # Allow running directly from the repo without ``pip install -e``.
-# The package lives in boxes_client/src/boxes_client.
+# The package lives in visionist_client/src/visionist_client.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import numpy as np
 
-from boxes_client import Box, trace  # noqa: E402
+from visionist_client import Visionist, trace  # noqa: E402
 
 
 def frames_from_video(path, n=4):
@@ -114,8 +114,8 @@ def main():
     jpeg_frames = [encode_jpeg(f) for f in frames]
 
     ok = 0
-    with Box(host, config_key="tapnext") as b:
-        print("\n-- Box.info() --")
+    with Visionist(host, config_key="tapnext") as b:
+        print("\n-- Visionist.info() --")
         info = b.info()
         print(info)
         if not info.get("reachable"):
@@ -130,8 +130,8 @@ def main():
         if _show("trace", res_trace, expect_frames=len(jpeg_frames)):
             ok += 1
 
-        # ----------------------------------------------------------- Box.run()
-        print("\n-- Box.run()     [generic: explicit data/config/method] --")
+        # ----------------------------------------------------------- Visionist.run()
+        print("\n-- Visionist.run()     [generic: explicit data/config/method] --")
         # Same envelope as trace(), but assembled by hand so we exercise the
         # generic path (no image assumption built into the client).
         # NOTE: the tapnext box *accumulates tracks across sequential requests*

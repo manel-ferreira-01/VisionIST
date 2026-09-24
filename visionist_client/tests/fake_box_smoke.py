@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """In-process fake boxes (same protos the client uses) to verify
-``boxes_client.Box`` end-to-end without real boxes running.
+``visionist_client.Visionist`` end-to-end without real boxes running.
 
 Two fake services are defined, both implementing the shared
 ``PipelineService.Process(Envelope) -> Envelope`` interface:
@@ -12,7 +12,7 @@ Two fake services are defined, both implementing the shared
   proves the client's generic path works for *non-image* boxes too.
 
 Run:
-    python boxes_client/tests/fake_box_smoke.py
+    python visionist_client/tests/fake_box_smoke.py
 """
 
 import io
@@ -30,8 +30,8 @@ try:
 except ImportError:  # optional extra -- the torch-dependent case 1 is then skipped
     torch = None
 
-from boxes_client._pb_loader import get as _get_pb
-from boxes_client import Box, trace
+from visionist_client._pb_loader import get as _get_pb
+from visionist_client import Visionist, trace
 
 
 pb2, pb2_grpc, aux = _get_pb()
@@ -111,10 +111,10 @@ def main() -> int:
         # tapnext: existing behavior (images -> tracks/visibles).
         print("\n== case 1: tapnext trace (images in, tracks out) ==")
         if torch is None:
-            print("  SKIP -- torch not installed (pip install 'boxes-client[torch]')")
+            print("  SKIP -- torch not installed (pip install 'visionist-client[torch]')")
             b = None
         else:
-            b = Box(f"127.0.0.1:{tap_port}")
+            b = Visionist(f"127.0.0.1:{tap_port}")
         if b is not None:
             try:
                 info = b.info()
@@ -130,9 +130,9 @@ def main() -> int:
                 b.close()
 
         # ------------------------------------------------------------- case 2
-        # Generic Box.run() against a *non-image* box (sentences).
+        # Generic Visionist.run() against a *non-image* box (sentences).
         print("\n== case 2: generic run() on a non-image box (sentences) ==")
-        b2 = Box(f"127.0.0.1:{sent_port}", config_key="sentences")
+        b2 = Visionist(f"127.0.0.1:{sent_port}", config_key="sentences")
         try:
             # reset (config-only call: data is empty)
             r_reset = b2.reset()
@@ -156,11 +156,11 @@ def main() -> int:
 
         # ------------------------------------------------------------- case 3
         # int -> float coercion in the data payload.
-        print("\n== case 3: int/float payload via Box.run ==")
+        print("\n== case 3: int/float payload via Visionist.run ==")
         # We'll just build and inspect the Envelope the client would send,
         # rather than spin up another fake service (coercion lives in
         # envelope.build -> aux.wrap_value).
-        from boxes_client.envelope import build
+        from visionist_client.envelope import build
         env2 = build(data={"vals": [1, 2, 3]}, config={})
         assert env2.data["vals"].WhichOneof("kind") == "ff"
         vals = list(env2.data["vals"].ff.values)

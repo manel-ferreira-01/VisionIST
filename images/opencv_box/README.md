@@ -122,7 +122,7 @@ command, bad parameter, undecodable frame, unknown extractor, …).
 | `matches_inliers_a` / `matches_inliers_b` | `b` (`numpy`) | two-image calls only: RANSAC inlier points of image A / image B, `(K, 2)` |
 | `fundamental_matrix` | `b` (`numpy`) | two-image calls only: the estimated 3×3 F (empty `(0, 0)` when matches were insufficient) |
 
-The declared `numpy` fields decode to `np.ndarray` in `boxes_client` (the
+The declared `numpy` fields decode to `np.ndarray` in `visionist_client` (the
 codec restores the `np.save` array — see `docs/CODECS.md`).
 
 ### Semantics worth knowing
@@ -134,13 +134,13 @@ codec restores the `np.save` array — see `docs/CODECS.md`).
 - **`reset`** is the standard box reset; on this box it is a plain no-op,
   since `match` is the only command and it is stateless.
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 
 # --- matching ---------------------------------------------------------
 res = b.run(

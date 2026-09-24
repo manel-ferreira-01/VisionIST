@@ -1,7 +1,7 @@
 """Fleet bookkeeping: which boxes exist where (``data/fleet.json``).
 
 The webui is a *caller* over the fleet, not an orchestrator — this file only
-remembers addresses, probes reachability via ``boxes_client.Box.info()``
+remembers addresses, probes reachability via ``visionist_client.Visionist.info()``
 (gRPC reflection), and keeps the last probe result for the UI.  No box
 content or pipeline logic lives here.
 """
@@ -48,12 +48,12 @@ def _check_addr(addr: str) -> str:
 
 
 def probe_box(addr: str, timeout: float = 5.0) -> dict[str, Any]:
-    """Reachability + reflection probe via boxes_client (its info() is the
+    """Reachability + reflection probe via visionist_client (its info() is the
     canonical one)."""
-    from boxes_client import Box
+    from visionist_client import Visionist
     out: dict[str, Any] = {"at": time.time(), "addr": addr}
     try:
-        with Box(addr) as box:
+        with Visionist(addr) as box:
             out.update(box.info(timeout=timeout))
     except Exception as e:  # noqa: BLE001 — probe must never raise
         out.update({"reachable": False, "reflection": False, "error": str(e)})

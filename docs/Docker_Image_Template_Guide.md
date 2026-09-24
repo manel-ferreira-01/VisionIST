@@ -472,13 +472,13 @@ docker push myregistry/my_service:latest
 
 ### Use it from the caller:
 
-The box is addressable by `ip:port` — `boxes_client` dials it directly:
+The box is addressable by `ip:port` — `visionist_client` dials it directly:
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = b.run(
     data   = {"images": [pathlib.Path("test.jpg")]},
     config = {"my_service": {"command": "process", "parameters": {}}},
@@ -516,8 +516,8 @@ for `docker pull`.
 ### Publish
 
 ```bash
-git tag boxes-v0.1.0
-git push origin boxes-v0.1.0
+git tag visionist-v0.1.0
+git push origin visionist-v0.1.0
 ```
 
 That builds and pushes every publishable box to

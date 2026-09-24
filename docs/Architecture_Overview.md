@@ -9,7 +9,7 @@ stop it, move it to another machine, or run several of them side by side
 without the others noticing.
 
 ```
-   caller (boxes_client or any orchestration layer)
+   caller (visionist_client or any orchestration layer)
         │  gRPC  Envelope → Envelope
         ▼
    ┌───────────┐   ┌───────────┐   ┌───────────┐
@@ -18,7 +18,7 @@ without the others noticing.
         each box:   proto + service.py + model, listening on :8061
 ```
 
-The calling side does the orchestration: `boxes_client` (or any other
+The calling side does the orchestration: `visionist_client` (or any other
 process) dials the box it needs, directly, by `ip:port`. That keeps
 the boxes independent and restartable and preserves the distributed nature of
 the fleet.
@@ -68,7 +68,7 @@ the shared pieces; the per-box READMEs describe the box-specific ones.
 |---|---|
 | Port | **8061** (AI4EU spec); overridable with the `PORT` env var |
 | Message limits | `grpc.max_*_message_length = -1` (payloads carry images/tensors) |
-| Reflection | gRPC reflection enabled — `Box.info()` works |
+| Reflection | gRPC reflection enabled — `Visionist.info()` works |
 | User | non-root `runner` inside the container |
 | GPU lifecycle | CPU at startup → move to GPU on first request (when CUDA is visible) → watchdog falls back to CPU after ~60 s idle. See [GPU lifecycle](#gpu-memory-lifecycle) |
 | Config | JSON section namespaced under the box key (`{"clip": {...}}`, `{"lang_sam": {...}}`, …) |
@@ -99,12 +99,12 @@ download — see its README). All variants respect an explicit
 
 ## Calling boxes
 
-The primary client is [`boxes_client`](../boxes_client/README.md) — a thin
+The primary client is [`visionist_client`](../visionist_client/README.md) — a thin
 Python package that dials one box:
 
 ```python
-from boxes_client import Box
-b = Box("localhost:8061")
+from visionist_client import Visionist
+b = Visionist("localhost:8061")
 res = b.run(data={"images": ["frame.jpg"]},
             config={"tapnext": {"command": "track", "parameters": {"grid_size": 30}}})
 print(res.config, res.tracks)

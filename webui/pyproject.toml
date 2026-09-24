@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "boxes-webui"
+name = "visionist-webui"
 version = "0.1.0"
-description = "Declarative web GUI over a fleet of 'boxes' — a thin web layer wrapping the box-agnostic boxes_client"
+description = "Declarative web GUI over a fleet of 'boxes' — a thin web layer wrapping the box-agnostic visionist_client"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-only" }
@@ -21,7 +21,7 @@ classifiers = [
 ]
 dependencies = [
     # the box-agnostic client (install the local one for development)
-    "boxes-client>=0.1.2",
+    "visionist-client>=0.1.2",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pydantic>=2.6",
@@ -37,7 +37,7 @@ torch = ["torch>=2.0"]
 dev = ["pytest>=7", "httpx>=0.27"]
 
 [project.scripts]
-boxes-webui = "webui.app:main"
+visionist-webui = "webui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

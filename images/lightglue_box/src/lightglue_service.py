@@ -34,7 +34,7 @@ Contract (see docs/gRPC_Services_Reference.md):
   ``"error"`` on failure), plus ``runtime`` and box-specific fields.
 * the response declares its payload encoding (``"encoding": {field: codec}``):
   every array output is an ``np.save`` (``.npy``) blob declared ``numpy`` —
-  ``boxes_client`` decodes them to ``np.ndarray`` keeping shape and dtype.
+  ``visionist_client`` decodes them to ``np.ndarray`` keeping shape and dtype.
 
 GPU lifecycle (fleet convention): models load lazily on first use, live on
 ``parameters.device`` (default: CUDA if visible, else CPU), and a watchdog

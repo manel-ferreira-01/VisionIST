@@ -1,9 +1,9 @@
-from boxes_client import Box          # pip install boxes-client  (~10 s: grpcio/protobuf/zstandard)
+from visionist_client import Visionist          # pip install visionist-client  (~10 s: grpcio/protobuf/zstandard)
 import pathlib
 
 
 #calling CLIP (image + text -> similarity)
-b = Box("localhost:9061")              # the box's address
+b = Visionist("localhost:9061")              # the box's address
 img = pathlib.Path("images/clip/test/dog.jpg")
 car = pathlib.Path("images/clip/test/car.jpg")
 
@@ -14,7 +14,7 @@ print(res)
 
 
 #calling textemb / sbert (text -> embeddings)
-b = Box("localhost:9062")
+b = Visionist("localhost:9062")
 
 res = b.run(data={"texts": ["a dog", "a car", "grass, sky, bark"]},
             config={"sbert": {"command": "encode", "parameters": {}}})
@@ -23,7 +23,7 @@ print(res)
 
 
 #calling tapnext (frames -> point tracks; stateful, so reset first)
-b = Box("localhost:9063")
+b = Visionist("localhost:9063")
 b.reset("tapnext")                     # tapnext accumulates tracks across calls
 
 res = b.run(data={"images": [img, img, img]},
@@ -33,7 +33,7 @@ print(res)
 
 
 #calling lang_segm (image + prompt -> segmentation)  [slow one: ~1 min on CPU]
-b = Box("localhost:9064")
+b = Visionist("localhost:9064")
 
 res = b.run(data={"images": [img]},
             config={"lang_sam": {"command": "segment", "parameters": {"box_threshold": 0.3, "text_threshold": 0.25},
@@ -43,7 +43,7 @@ print(res)
 
 
 #calling opencv (two images -> feature match)
-b = Box("localhost:9065")
+b = Visionist("localhost:9065")
 
 res = b.run(data={"images": [img, car]},
             config={"opencv": {"command": "match", "parameters": {}}})

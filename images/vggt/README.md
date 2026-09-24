@@ -85,12 +85,12 @@ reason is in `"error"`).
 
 ## Calling
 
-### `boxes_client` (preferred)
+### `visionist_client` (preferred)
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = b.run(
     data={"images": ["frame_00.jpg", "frame_01.jpg", "frame_02.jpg"]},
     config={"vggt": {"command": "reconstruct",

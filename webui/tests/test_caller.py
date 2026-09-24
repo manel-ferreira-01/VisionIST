@@ -210,7 +210,7 @@ def test_tapnext_images_is_a_list(reg, store):
 
 
 def test_int_coercion_left_to_client(reg, store):
-    """ints in parameters are fine — boxes_client coerces when enveloping."""
+    """ints in parameters are fine — visionist_client coerces when enveloping."""
     d = reg.get("tapnext")
     spec = build_call(d, CallRequest(
         data={"images": b"frame"}, parameters={"grid_size": 8}), store)

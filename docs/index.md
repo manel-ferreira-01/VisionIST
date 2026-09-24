@@ -1,7 +1,7 @@
-# boxes — documentation
+# VisionIST — documentation
 
 A fleet of independent, Dockerized AI inference services ("boxes") speaking one
-shared gRPC envelope, called by `boxes_client` or by orchestration-layer boxes.
+shared gRPC envelope, called by `visionist_client` or by orchestration-layer boxes.
 
 ## Start here
 
@@ -11,7 +11,7 @@ shared gRPC envelope, called by `boxes_client` or by orchestration-layer boxes.
   own from scratch, test it.
 - **[gRPC_Services_Reference](gRPC_Services_Reference.md)** — the envelope
   contract: `config_json` shape per box, `data` fields, `results` encoding,
-  devices, calling via `boxes_client` or raw stubs.
+  devices, calling via `visionist_client` or raw stubs.
 - **[Docker_Image_Template_Guide](Docker_Image_Template_Guide.md)** — Dockerfile
   templates (CPU / CUDA / YOLO) used by the boxes in this repo.
 - **[CODECS](CODECS.md)** — self-describing payload decoding: the `"encoding"`
@@ -41,5 +41,5 @@ shared gRPC envelope, called by `boxes_client` or by orchestration-layer boxes.
 
 ## The client
 
-- [`boxes_client/README.md`](../boxes_client/README.md) — the Python client
-  (`Box(ip:port).run(data, config)`), coercion rules, result decoding, `info()`.
+- [`visionist_client/README.md`](../visionist_client/README.md) — the Python client
+  (`Visionist(ip:port).run(data, config)`), coercion rules, result decoding, `info()`.

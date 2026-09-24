@@ -5,7 +5,7 @@ A gRPC box that encodes a list of sentences with sentence-transformers
 sentence-similarity matrix.
 
 The box speaks the shared **envelope** interface, so it is addressable through
-`boxes_client` exactly like tapnext / clip:
+`visionist_client` exactly like tapnext / clip:
 
 ```python
 service PipelineService {
@@ -55,7 +55,7 @@ One field in `data`, and a small `config`:
 
 - `data["texts"]` -- list of strings.
 - `config["sbert"]["command"]` -- `"encode"` (default) or `"reset"` (no-op,
-  the box is stateless, but `reset_first` from `boxes_client` stays safe).
+  the box is stateless, but `reset_first` from `visionist_client` stays safe).
 
 ### Response
 
@@ -67,12 +67,12 @@ two `torch.save`-decoded payloads:
 | `embeddings`   | `[num_texts, D]`       | sentence embeddings          |
 | `similarities` | `[num_texts, num_texts]` | pairwise cosine similarity |
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = b.run(
     data={
         "texts": [

@@ -1,8 +1,8 @@
 # Build and publish the box fleet to GitHub Container Registry (GHCR).
 #
 # Publish:
-#     git tag boxes-v0.1.0
-#     git push origin boxes-v0.1.0
+#     git tag visionist-v0.1.0
+#     git push origin visionist-v0.1.0
 #
 # ...or trigger manually from Actions with an arbitrary version string
 # (e.g. "0.1.0-dev1") without creating a git tag.
@@ -20,7 +20,7 @@ name: publish boxes
 on:
   push:
     tags:
-      - "boxes-v*"
+      - "visionist-v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -78,7 +78,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ver="$INPUTS_TAG"
           else
-            ver="${GITHUB_REF_NAME#boxes-v}"
+            ver="${GITHUB_REF_NAME#visionist-v}"
           fi
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "publishing tag: $ver"
@@ -123,7 +123,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ver="$INPUTS_TAG"
           else
-            ver="${GITHUB_REF_NAME#boxes-v}"
+            ver="${GITHUB_REF_NAME#visionist-v}"
           fi
           echo "version=$ver" >> "$GITHUB_OUTPUT"
       - name: Print digests

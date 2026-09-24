@@ -1,4 +1,4 @@
-"""End-to-end: HTTP API -> core -> boxes_client -> fake box (real gRPC) ->
+"""End-to-end: HTTP API -> core -> visionist_client -> fake box (real gRPC) ->
 serialized JSON + artifacts.  This is the contract the SPA will rely on.
 """
 

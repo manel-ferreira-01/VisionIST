@@ -1,7 +1,7 @@
-"""FastAPI app factory for boxes-webui.
+"""FastAPI app factory for visionist-webui.
 
 Run:
-    boxes-webui                                   # after: pip install -e webui
+    visionist-webui                                   # after: pip install -e webui
     uvicorn webui.app:factory                     # equivalent, auto-reload friendly
 
 The SPA (Phase 2/3, ``web/``) builds into ``web/dist`` and is served at
@@ -34,11 +34,11 @@ def create_app(env: AppEnv | None = None) -> FastAPI:
     fleet = Fleet(env.data_dir / "fleet.json")
 
     app = FastAPI(
-        title="boxes-webui",
+        title="visionist-webui",
         version=__version__,
         description=(
             "Declarative web layer over a fleet of 'boxes': the box-agnostic "
-            "core + YAML box definitions + boxes_client under the hood. "
+            "core + YAML box definitions + visionist_client under the hood. "
             "The core names no box — all box knowledge lives in boxes/*.yaml."
         ),
     )
@@ -53,7 +53,7 @@ def create_app(env: AppEnv | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     def root():
         return {
-            "service": "boxes-webui",
+            "service": "visionist-webui",
             "version": __version__,
             "defs": [d.id for d in registry],
             "endpoints": {

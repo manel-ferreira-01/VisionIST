@@ -1,12 +1,12 @@
-# Publishing `boxes-client` to PyPI
+# Publishing `visionist-client` to PyPI
 
 ## Status: ✅ 0.1.1 published (2026-09-14)
-https://pypi.org/project/boxes-client/0.1.1/ — installed from PyPI into a fresh
-venv; import + both smoke suites pass. The name `boxes-client` is reserved.
+https://pypi.org/project/visionist-client/0.1.1/ — installed from PyPI into a fresh
+venv; import + both smoke suites pass. The name `visionist-client` is reserved.
 
 ## Original verification notes
 
-- Name `boxes-client` is **free** on PyPI.
+- Name `visionist-client` is **free** on PyPI.
 - `python -m build` produces clean sdist + pure-Python wheel (17 files,
   LICENSE bundled in the wheel as `dist-info/licenses/LICENSE`).
 - Metadata checked: `License-Expression: GPL-3.0-only`,
@@ -24,7 +24,7 @@ venv; import + both smoke suites pass. The name `boxes-client` is reserved.
 #    https://pypi.org/manage/__user__/tokens/
 
 # 1. Build
-cd boxes_client
+cd visionist_client
 python -m build                     # -> dist/
 
 # 2. Quick sanity (optional): install in a fresh venv and run the tests
@@ -37,9 +37,9 @@ pip install twine
 python -m twine upload --non-interactive dist/*
 
 # 4. Verify like a user would
-pip download boxes-client==0.1.1 --no-deps -d /tmp/dl
-pip install ./tmp/dl/boxes_client-0.1.1-py3-none-any.whl
-python -c "from boxes_client import Box; print(Box)"
+pip download visionist-client==0.1.1 --no-deps -d /tmp/dl
+pip install ./tmp/dl/visionist_client-0.1.1-py3-none-any.whl
+python -c "from visionist_client import Visionist; print(Visionist)"
 ```
 
 ## Caveats

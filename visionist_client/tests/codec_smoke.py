@@ -19,10 +19,10 @@ client decodes the payload via the named codec instead of guessing:
 
 ``torch`` is an optional extra: the torch-dependent pieces of cases 5/6 are
 skipped (not failed) when it is not installed, so the test also passes on a
-plain ``pip install boxes-client``.
+plain ``pip install visionist-client``.
 
 Run:
-    python boxes_client/tests/codec_smoke.py
+    python visionist_client/tests/codec_smoke.py
 """
 
 import io
@@ -43,9 +43,9 @@ try:
 except ImportError:  # optional extra -- the torch-dependent cases are skipped
     torch = None
 
-from boxes_client import Box
-from boxes_client.codec import CODECS, decode_with
-from boxes_client._pb_loader import get as _get_pb
+from visionist_client import Visionist
+from visionist_client.codec import CODECS, decode_with
+from visionist_client._pb_loader import get as _get_pb
 
 pb2, pb2_grpc, aux = _get_pb()
 
@@ -221,7 +221,7 @@ def main() -> int:
         print("\n== case 1: declared zstd_pickle (lang_segm-style) ==")
         srv, port = _serve(FakeLangSegm(), "lang_segm")
         servers.append(srv)
-        b = Box(f"127.0.0.1:{port}")
+        b = Visionist(f"127.0.0.1:{port}")
         try:
             res = b.run(
                 data={"images": [b"jpeg-frame"]},
@@ -242,7 +242,7 @@ def main() -> int:
         srv, port = _serve(
             FakeJsonBox("jsonbox", "json", "meta"), "jsonbox-str")
         servers.append(srv)
-        b = Box(f"127.0.0.1:{port}")
+        b = Visionist(f"127.0.0.1:{port}")
         try:
             res = b.run(data={}, config={"jsonbox": {"command": "work"}})
             assert res.encoding == "json"
@@ -256,7 +256,7 @@ def main() -> int:
         srv, port = _serve(
             FakeJsonBox("mapbox", {"meta": "json"}, "meta"), "jsonbox-map")
         servers.append(srv)
-        b = Box(f"127.0.0.1:{port}")
+        b = Visionist(f"127.0.0.1:{port}")
         try:
             res = b.run(data={}, config={"mapbox": {"command": "work"}})
             assert res.encoding == {"meta": "json"}
@@ -269,7 +269,7 @@ def main() -> int:
         print("\n== case 4: unknown codec -> raw bytes, no exception ==")
         srv, port = _serve(FakeUnknownCodec(), "unknownbox")
         servers.append(srv)
-        b = Box(f"127.0.0.1:{port}")
+        b = Visionist(f"127.0.0.1:{port}")
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")  # the degradation warning is expected
@@ -284,11 +284,11 @@ def main() -> int:
         # ------------------------------------------------------------- case 5
         print("\n== case 5: no encoding -> legacy auto-chain unchanged ==")
         if torch is None:
-            print("  SKIP -- torch not installed (pip install 'boxes-client[torch]')")
+            print("  SKIP -- torch not installed (pip install 'visionist-client[torch]')")
         else:
             srv, port = _serve(FakeLegacy(), "legacybox")
             servers.append(srv)
-            b = Box(f"127.0.0.1:{port}")
+            b = Visionist(f"127.0.0.1:{port}")
             try:
                 res = b.run(data={}, config={"legacybox": {"command": "work"}})
                 assert res.encoding is None

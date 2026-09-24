@@ -1,9 +1,9 @@
 {
-  "name": "boxes-webui-web",
+  "name": "visionist-webui-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "boxes-webui SPA: fleet dashboard + definition-driven console (React + Vite + TypeScript)",
+  "description": "visionist-webui SPA: fleet dashboard + definition-driven console (React + Vite + TypeScript)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

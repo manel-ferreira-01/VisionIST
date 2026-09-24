@@ -5,9 +5,9 @@ Every box speaks the SAME ``pipeline.PipelineService`` interface, so one thin,
 box-agnostic client reaches the whole fleet. There is no per-box SDK, no
 per-box import, no box-specific code in the caller. An end user just:
 
-    Box(address).run(data={...}, config={...})
+    Visionist(address).run(data={...}, config={...})
 
-...and that's it. ``Box`` does not know it is talking to CLIP, TAPNext,
+...and that's it. ``Visionist`` does not know it is talking to CLIP, TAPNext,
 LangSAM or SBERT -- the box itself does, through the ``config`` section it
 understands (e.g. ``"clip"``, ``"tapnext"``, ``"lang_sam"``, ``"sbert"``).
 
@@ -20,13 +20,13 @@ Swap a model behind a box, or add a new box, and this file does not change.
 import pathlib
 import sys
 
-# --- make boxes_client importable whether installed or run from the repo ---
+# --- make visionist_client importable whether installed or run from the repo ---
 _REPO = pathlib.Path(__file__).resolve().parent.parent
-_SRC  = _REPO / "boxes_client" / "src"
+_SRC  = _REPO / "visionist_client" / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from boxes_client import Box, trace  # noqa: E402
+from visionist_client import Visionist, trace  # noqa: E402
 
 # Test payloads (real assets in the repo).
 DOG, CAR = _REPO / "images/clip/test/dog.jpg", _REPO / "images/clip/test/car.jpg"
@@ -94,7 +94,7 @@ def shape(v):
 def reach(name, address, data, config, reset=False):
     """One generic request to one box. This is literally all the client does."""
     key = next(iter(config))                      # the box's own section name
-    box = Box(address)
+    box = Visionist(address)
     try:
         info = box.info(timeout=8)
         if not info.get("reachable"):
@@ -131,13 +131,13 @@ def main():
     print("-" * 78)
 
     # --- optional: the tapnext one-liner convenience (same generic core) ----
-    b = Box(FLEET[2][1], config_key="tapnext")
+    b = Visionist(FLEET[2][1], config_key="tapnext")
     try:
         info = b.info(timeout=8)
         if info.get("reachable"):
             r = trace(b, images=[DOG, DOG, DOG], grid_size=30)
             print(f"\n[bonus] trace(box, ...)  -> taps={shape(r.fields.get('tracks'))} "
-                  f"(convenience layer over the same Box.run)")
+                  f"(convenience layer over the same Visionist.run)")
     finally:
         b.close()
 

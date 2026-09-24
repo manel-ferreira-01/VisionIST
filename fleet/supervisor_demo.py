@@ -4,7 +4,7 @@
 The whole point to show: there is NO per-box SDK. Every box is reached with
 the identical two-argument call
 
-        Box(address).run(data={...}, config={...})
+        Visionist(address).run(data={...}, config={...})
 
 only the address and the box's own ``config`` section differ. Nothing about
 CLIP / SBERT / TAPNext / LangSAM / OpenCV lives in the client; the box itself
@@ -19,13 +19,13 @@ import pathlib
 import sys
 import traceback
 
-# Make boxes_client importable whether installed or run from the repo.
+# Make visionist_client importable whether installed or run from the repo.
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-_SRC = ROOT / "boxes_client" / "src"
+_SRC = ROOT / "visionist_client" / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from boxes_client import Box  # noqa: E402
+from visionist_client import Visionist  # noqa: E402
 
 # Real test assets in the repo.
 DOG = ROOT / "images/clip/test/dog.jpg"
@@ -81,7 +81,7 @@ def one(i, name, addr, fn):
 
 def demo_clip():
     """Image + text -> per-pair similarity scores (one CLIP call)."""
-    b = Box("localhost:9061")
+    b = Visionist("localhost:9061")
     try:
         res = b.run(
             data={"images": [DOG], "texts": ["a dog", "the ocean"]},
@@ -101,7 +101,7 @@ def demo_clip():
 
 def demo_textemb():
     """Pure-text sentence embeddings + a similarity matrix (no images)."""
-    b = Box("localhost:9062")
+    b = Visionist("localhost:9062")
     try:
         texts = ["a dog", "a car", "grass, sky, bark"]
         res = b.run(data={"texts": texts},
@@ -118,7 +118,7 @@ def demo_textemb():
 
 def demo_tapnext():
     """Multi-frame point tracking -> tracks over time (stateful: reset first)."""
-    b = Box("localhost:9063")
+    b = Visionist("localhost:9063")
     try:
         b.reset("tapnext")   # tapnext accumulates across calls -> start clean
         res = b.run(data={"images": [DOG, DOG, DOG]},
@@ -134,7 +134,7 @@ def demo_tapnext():
 
 def demo_lang_segm():
     """Text-guided segmentation -> decoded results (the zstd_pickle codec)."""
-    b = Box("localhost:9064")
+    b = Visionist("localhost:9064")
     try:
         res = b.run(
             data={"images": [DOG]},
@@ -158,7 +158,7 @@ def demo_lang_segm():
 
 def demo_opencv():
     """Feature matching between two images -> keypoints + inlier matches."""
-    b = Box("localhost:9065")
+    b = Visionist("localhost:9065")
     try:
         res = b.run(data={"images": [DOG, CAR]},
                     config={"opencv": {"command": "match", "parameters": {}}})
@@ -174,7 +174,7 @@ def demo_opencv():
 
 def demo_moge():
     """Monocular 3D geometry -> per-image metric depth/points/normals (CUDA-only box)."""
-    b = Box("localhost:9067")
+    b = Visionist("localhost:9067")
     try:
         res = b.run(data={"images": [DOG]},
                     config={"moge": {"command": "infer", "parameters": {}}})
@@ -195,7 +195,7 @@ def main() -> int:
     one(4, "lang_segm",  "localhost:9064", demo_lang_segm)
     one(5, "opencv",     "localhost:9065", demo_opencv)
     one(6, "moge",       "localhost:9067", demo_moge)
-    print("Every call above is the same shape:  Box(addr).run(data, config).")
+    print("Every call above is the same shape:  Visionist(addr).run(data, config).")
     print("That is the entire end-user surface.")
     return 0
 

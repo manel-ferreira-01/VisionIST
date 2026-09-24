@@ -4,8 +4,8 @@ Boxes send heavy payloads as raw ``bytes``. The old client *guessed* the
 encoding; that guessing is kept only as a **legacy fallback** so
 un-migrated boxes keep working. The documented path is the box-declared
 ``"encoding"`` keyword decoded by the named codecs in
-:mod:`boxes_client.codec` (see ``CODECS.md``): when a field has a declared
-codec, :mod:`boxes_client.result` uses :func:`codec.decode_with` directly
+:mod:`visionist_client.codec` (see ``CODECS.md``): when a field has a declared
+codec, :mod:`visionist_client.result` uses :func:`codec.decode_with` directly
 and this guessing never runs.
 
 Guess chain (legacy): JSON (if it looks like JSON) -> torch (if installed)
@@ -18,7 +18,7 @@ raises: the client always returns *something*.
     array. If you control the box, declare ``"encoding"`` in its response
     config instead of relying on guessing.
 
-The codec *bodies* live once in :mod:`boxes_client.codec`; this module
+The codec *bodies* live once in :mod:`visionist_client.codec`; this module
 wraps them with the legacy "try it, or fall through" behaviour.
 """
 

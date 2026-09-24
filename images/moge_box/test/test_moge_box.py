@@ -31,12 +31,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import boxes_client
+# Import visionist_client
 try:
-    from boxes_client import Box
+    from visionist_client import Visionist
 except ImportError:
-    logger.error("boxes_client not found. Install it first:")
-    logger.error("  cd ~/boxes && pip install -e boxes_client")
+    logger.error("visionist_client not found. Install it first:")
+    logger.error("  cd ~/boxes && pip install -e visionist_client")
     sys.exit(1)
 
 # Test configuration
@@ -232,7 +232,7 @@ def test_1_connectivity():
     print("="*70)
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         info = box.info()
         print(f"✅ Connected to box at {BOX_HOST}")
         print(f"   Service info: {info}")
@@ -251,7 +251,7 @@ def test_2_reset_command():
     print("="*70)
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         res = box.run(
             data={},
@@ -279,7 +279,7 @@ def test_3_empty_request():
     print("="*70)
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         res = box.run(
             data={},
@@ -312,7 +312,7 @@ def test_4_basic_inference():
         return False
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         print(f"   Running inference on {test_img}...")
         start_time = time.time()
@@ -386,7 +386,7 @@ def test_5_batch_inference():
         return False
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         # Use same image 3 times to simulate batch
         images = [test_img, test_img, test_img]
@@ -434,7 +434,7 @@ def test_6_cpu_mode():
         return False
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         print(f"   Requesting CPU inference (should be rejected cleanly)...")
         res = box.run(
@@ -487,7 +487,7 @@ def test_7_parameter_combinations():
         desc = params.pop("desc")
         
         try:
-            box = Box(BOX_HOST)
+            box = Visionist(BOX_HOST)
             
             res = box.run(
                 data={"images": [test_img]},
@@ -515,7 +515,7 @@ def test_8_error_handling():
     print("="*70)
     
     try:
-        box = Box(BOX_HOST)
+        box = Visionist(BOX_HOST)
         
         # The client reads local files itself, so a box-side error can only be
         # triggered by invalid image bytes (undecodable by cv2).

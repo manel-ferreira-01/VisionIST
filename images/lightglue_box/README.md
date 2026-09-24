@@ -113,7 +113,7 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 sipgisr/lightgluebox
 }
 ```
 
-`data` (all declared `numpy`; `np.save` blobs — `boxes_client` hands them
+`data` (all declared `numpy`; `np.save` blobs — `visionist_client` hands them
 back as `np.ndarray` with shape and dtype):
 
 | field         | shape    | description |
@@ -169,13 +169,13 @@ unknown extractor, bad parameter, undecodable frame, …).
 - **Speed knobs**, in order of leverage: fewer `max_keypoints`, higher
   `filter_threshold`, smaller `window`, `device: cpu` for a no-GPU box.
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 
 res = b.run(
     data   = {"images": [pathlib.Path("a.jpg"), pathlib.Path("b.jpg")]},

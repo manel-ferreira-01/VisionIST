@@ -1,4 +1,4 @@
-# boxes-client
+# visionist-client
 
 A thin Python client for calling deployed AI **"boxes"** by `IP:port`.
 
@@ -14,10 +14,10 @@ service PipelineService {
 interface. Point this client at **any one box** and send an `Envelope`:
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 
-b = Box("localhost:8061")                 # a local box
-# b = Box("10.0.0.5:8061")                # ...or a remote one
+b = Visionist("localhost:8061")                 # a local box
+# b = Visionist("10.0.0.5:8061")                # ...or a remote one
 
 res = b.run(data={"images": ["frame.jpg"]},
             config={"my_box": {"command": "do_thing", "parameters": {}}})
@@ -29,7 +29,7 @@ Box-specific one-liners live in an *optional* convenience layer, e.g. the
 tapnext tracker:
 
 ```python
-from boxes_client import trace
+from visionist_client import trace
 res = trace(b, images=["frame.jpg"], grid_size=30)
 ```
 
@@ -41,12 +41,12 @@ nature of the fleet).
 ## Install
 
 ```bash
-pip install boxes-client
+pip install visionist-client
 # optional, to decode tapnext/vggt tensor payloads to numpy:
-pip install "boxes-client[torch]"
+pip install "visionist-client[torch]"
 ```
 
-(From a repo checkout, instead: `pip install -e boxes_client`.)
+(From a repo checkout, instead: `pip install -e visionist_client`.)
 
 `zstandard` is a base dependency (the `zstd_pickle` codec needs it); `torch`
 stays optional. Without the codec's library, declared payloads degrade to raw
@@ -58,11 +58,11 @@ The full design of the declared-encoding contract lives in
 
 ## Core API (box-agnostic) + optional conveniences
 
-`Box` is deliberately box-agnostic: it builds and sends an `Envelope` and reads
+`Visionist` is deliberately box-agnostic: it builds and sends an `Envelope` and reads
 a `Result` back, and knows **no box, field, or model**. Per-box sugar lives in a
 separate convenience layer, so adding one never touches the core.
 
-### 1. Generic — `Box.run(data, config, method, reset_first)`
+### 1. Generic — `Visionist.run(data, config, method, reset_first)`
 The workhorse. No assumption about field names or payload types:
 
 ```python
@@ -78,31 +78,31 @@ below and wrapped into the shared `Value` oneof via the vendored `aux.wrap_value
 
 ### 2. Convenience — `trace(box, images, grid_size=None, reset_first=True)`
 An **optional** one-liner for the *tapnext* box, living in
-`boxes_client.conveniences` (not the core). It reads image files (or accepts
-pre-encoded bytes) and just calls `Box.run()` with the right shape:
+`visionist_client.conveniences` (not the core). It reads image files (or accepts
+pre-encoded bytes) and just calls `Visionist.run()` with the right shape:
 
 ```python
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = trace(b, images=["f1.jpg", "f2.jpg", "f3.jpg"], grid_size=30)
 np.save("tracks.npy", res.tracks.numpy())
 ```
 
-The core `Box` knows nothing about tapnext — `trace` *is* the only tapnext
+The core `Visionist` knows nothing about tapnext — `trace` *is* the only tapnext
 knowledge, and it's safe to delete without touching the generic client. Add a
 sibling convenience (`segment`, `embed`, `detect`, …) for other boxes the same
 way; never put a box name in `box.py`.
 
-### `Box.reset(config_key=None)`
+### `Visionist.reset(config_key=None)`
 Sends `{config_key: {"command": "reset"}}` on `Process`. `config_key` is the
 box's section name (or the one from the constructor). Stateful boxes clear
 state; stateless boxes typically ignore it. Pass the box name explicitly, or
-construct with `Box(host, config_key="tapnext")`.
+construct with `Visionist(host, config_key="tapnext")`.
 
-### `Box.info()`
+### `Visionist.info()`
 Asks the box (via gRPC reflection) whether it serves `pipeline.PipelineService`.
 Useful to check box reachability and shape before committing to a call.
 
-## Value coercion (for `Box.run` / convenience `data` values)
+## Value coercion (for `Visionist.run` / convenience `data` values)
 
 | You pass | What's sent |
 |---|---|
@@ -155,7 +155,7 @@ carries a generic `"encoding"` key — a codec name for all `bytes` fields, or a
 ```
 
 ``encoding`` scans the parsed config top-level, then each section (first hit
-wins). Named codecs (`[src/boxes_client/codec.py](src/boxes_client/codec.py)`,
+wins). Named codecs (`[src/visionist_client/codec.py](src/visionist_client/codec.py)`,
 registry `CODECS` / `decode_with`, full design in [docs/CODECS.md](../docs/CODECS.md)):
 
 | name          | payload                               | decoded to              |
@@ -170,7 +170,7 @@ Unknown names or a missing codec library degrade to **raw bytes + a
 warning** — never an exception.
 
 The legacy guess chain
-(`[src/boxes_client/decode_util.py](src/boxes_client/decode_util.py)`):
+(`[src/visionist_client/decode_util.py](src/visionist_client/decode_util.py)`):
 **JSON → torch (if installed) → numpy → raw bytes**, kept only for boxes that
 declared nothing. Guessing is approximate (the numpy branch will happily
 reinterpret any 4-byte-aligned blob); boxes are expected to declare.
@@ -179,14 +179,14 @@ reinterpret any 4-byte-aligned blob); boxes are expected to declare.
 
 | Box | In scope | Notes |
 |-----|----------|-------|
-| tapnext (`Process`) | ✅ | v1 target; `trace(box, ...)` convenience over `Box.run` |
-| vggt, moege_box, clip, lang_segm, **yolo** (`Process`) | ✅ envelope shape | call via `Box.run(...)` with the box-specific `config`; `yolo` always tracks (per-session `track_id` in `detections`; `session_id`/`reset`/`list` like tapnext) and declares per-field `encoding` (`detections` json, `annotated` identity) |
+| tapnext (`Process`) | ✅ | v1 target; `trace(box, ...)` convenience over `Visionist.run` |
+| vggt, moege_box, clip, lang_segm, **yolo** (`Process`) | ✅ envelope shape | call via `Visionist.run(...)` with the box-specific `config`; `yolo` always tracks (per-session `track_id` in `detections`; `session_id`/`reset`/`list` like tapnext) and declares per-field `encoding` (`detections` json, `annotated` identity) |
 | opencv_box (`Process`) | ✅ | standard envelope: `match` / `similarity_check` / `reset` commands; `numpy` fields declared and decoded (np.save blobs), similarity frames as `identity` |
-| cotracker (`Forward`) | ⏸ pending | use `Box.run` after it's migrated to the shared envelope (client needs no changes) |
+| cotracker (`Forward`) | ⏸ pending | use `Visionist.run` after it's migrated to the shared envelope (client needs no changes) |
 
 ### Method dispatch caveat
 
-`Box.run(..., method=...)` resolves to a method on the **client-stub**, which is
+`Visionist.run(..., method=...)` resolves to a method on the **client-stub**, which is
 built from the shared `pipeline.proto`. Today the shared proto defines only
 `Process`, so `method=` is currently useful only for `Process`. Boxes that add
 extra `PipelineService` RPCs will need either (a) to be migrated to a *single*
@@ -199,10 +199,10 @@ payload types, config shape) is fully generic.
 
 ```bash
 # in-process fake box (no GPU, no real box needed)
-python boxes_client/tests/fake_box_smoke.py
+python visionist_client/tests/fake_box_smoke.py
 
 # real tapnext box at BOX_HOST:PORT
-BOX_HOST=localhost:8061 python boxes_client/tests/live_tapnext.py
+BOX_HOST=localhost:8061 python visionist_client/tests/live_tapnext.py
 ```
 
 ## Notes / design
@@ -210,7 +210,7 @@ BOX_HOST=localhost:8061 python boxes_client/tests/live_tapnext.py
 - **Client-side only.** The box stays a box: independent, restartable,
   composable. Distribution is preserved because the *client* dials the box
   directly, so "local box" and "remote box" are the same call.
-- **Auto-protocol.** `Box.info()` uses gRPC reflection to confirm the box
+- **Auto-protocol.** `Visionist.info()` uses gRPC reflection to confirm the box
   serves `pipeline.PipelineService`. If the box does not serve reflection,
   calls still work — `info()` just reports `reflection: False`.
 - **Declared-first decoding.** Boxes declare `"encoding"` in the response

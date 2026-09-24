@@ -1,4 +1,4 @@
-"""Result object returned from ``Box`` calls."""
+"""Result object returned from ``Visionist`` calls."""
 
 import json
 from dataclasses import dataclass, field
@@ -75,8 +75,8 @@ class Result:
 
     ``fields`` maps every Envelope data field to its decoded value: the
     box-declared ``"encoding"`` codec when the box declares one
-    (:mod:`boxes_client.codec`), else the legacy auto-decode
-    (:mod:`boxes_client.decode_util`). Use ``raw`` for the undecoded Envelope.
+    (:mod:`visionist_client.codec`), else the legacy auto-decode
+    (:mod:`visionist_client.decode_util`). Use ``raw`` for the undecoded Envelope.
     Field values can also be read directly, e.g. ``res.tracks``.
     """
 

@@ -1,4 +1,4 @@
-# boxes-webui — guide & working state
+# visionist-webui — guide & working state
 
 > The declarative web layer over the fleet: a box-agnostic core, YAML box
 > definitions, a FastAPI HTTP API, and a def-driven SPA.
@@ -9,11 +9,11 @@
 
 ```
    browser / curl ──HTTP──▶ webui (FastAPI, box-agnostic core)
-                                  │  boxes_client.Box.run(...)
+                                  │  visionist_client.Visionist.run(...)
    box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · yolo
 ```
 
-**Design rule (inherited from `boxes_client`):** the core is *smart about
+**Design rule (inherited from `visionist_client`):** the core is *smart about
 shape, dumb about content*. Nothing in `webui/src/webui/` or `webui/web/src/`
 names a box. **All box knowledge lives in `webui/boxes/*.yaml`** — adding a
 box = one YAML file, never code. The per-box README under `images/` stays the
@@ -44,7 +44,7 @@ standard `yolo` box covers object detection via `boxes/yolo.yaml`.
 
 ```bash
 # deps (client first, editable)
-pip install -e boxes_client && pip install -e webui
+pip install -e visionist_client && pip install -e webui
 
 # backend tests
 cd webui && python3 -m pytest tests/ -q            # 52 passed in ~4 s
@@ -75,7 +75,7 @@ webui/
 │   │   ├── caller.py         # build_call() pure / execute() wire (only gRPC)
 │   │   ├── serialize.py      # Result -> JSON + artifacts (never raises)
 │   │   ├── artifact.py       # token store (TTL + cap)
-│   │   └── fleet.py          # fleet.json CRUD + Box.info() probes
+│   │   └── fleet.py          # fleet.json CRUD + Visionist.info() probes
 │   └── api/                  # routes: defs / fleet / upload / file / call
 ├── web/                      # SPA (React + TS + Vite)
 │   └── src/

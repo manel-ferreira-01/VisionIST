@@ -86,9 +86,9 @@ Each codec is a self-contained function with **no box name and no global state**
 codec whose lib is missing must degrade to `identity` (raw bytes) + a warning,
 **not** raise (the "client always returns something" rule).
 
-## 4. Changes in `boxes_client` (the code to write)
+## 4. Changes in `visionist_client` (the code to write)
 
-> All in `src/boxes_client/`. Keep the core box-agnostic — none of this may
+> All in `src/visionist_client/`. Keep the core box-agnostic — none of this may
 > branch on a box name.
 
 ### 4.1 New module `codec.py` (or add to `decode_util.py`)
@@ -125,8 +125,8 @@ codec, call `decode_with(buf, codec)` directly and skip guessing.
 Back-compat: if `enc is None`, behaviour is **identical to today** → every
 existing box keeps working unchanged.
 
-### 4.4 `envelope` / `Box` — no change
-The client sends what it's given; decoding is the only new logic. `Box.run`
+### 4.4 `envelope` / `Visionist` — no change
+The client sends what it's given; decoding is the only new logic. `Visionist.run`
 signature unchanged.
 
 ### 4.5 `pyproject.toml`
@@ -158,7 +158,7 @@ Already declared (reference):
 
 ## 6. Tests to add (make it provable)
 
-In `boxes_client/tests/fake_box_smoke.py` (or a new `tests/codec_smoke.py`):
+In `visionist_client/tests/fake_box_smoke.py` (or a new `tests/codec_smoke.py`):
 
 1. A fake box whose response is `data={"results": zstd(pickle([...]))}` with
    `config={"codecbox":{"status":"done","encoding":"zstd_pickle"}}` → assert
@@ -177,7 +177,7 @@ Reuse the existing fake-servicer harness in `fake_box_smoke.py`; no GPU needed.
 - `docs/gRPC_Services_Reference.md` → in the "Heavy results" section: replace the
   "client decodes for you" line with "declare `encoding` in the response config;
   codec table above; default raw."
-- `boxes_client/README.md` → "Result object" / decode-order section: documented
+- `visionist_client/README.md` → "Result object" / decode-order section: documented
   order is now *declared codec → (legacy auto)*; add the `codec.py` + examples.
 - `images/lang_segm/README.md` → the client call can now rely on `res.results`
   being a decoded list (drop the manual `zstd`/`pickle` unwrap, keep as example
@@ -201,7 +201,7 @@ Reuse the existing fake-servicer harness in `fake_box_smoke.py`; no GPU needed.
 
 ## 9. Acceptance criteria (definition of done)
 
-- [ ] `boxes_client` builds/imports; `codec.py` has the 5 named codecs + `decode_with`.
+- [ ] `visionist_client` builds/imports; `codec.py` has the 5 named codecs + `decode_with`.
 - [ ] `Result.from_envelope` reads `encoding` (string or per-field dict), exposes `res.encoding`.
 - [ ] Fake-box test #1 (above) passes: lang_segm-style `results` returns a **decoded list**, `res.fields['results']` type is `list` (not `bytes`/`ndarray`).
 - [ ] Test with unknown codec → raw bytes, no exception.
@@ -211,7 +211,7 @@ Reuse the existing fake-servicer harness in `fake_box_smoke.py`; no GPU needed.
 - [ ] Docs + `conventions` table updated.
 - [ ] Re-run `fleet/hello.py`: the `lang_segm` row shows `results=list[...]` (decoded),
       not `results=bytes[2969]`.
-- [ ] A new commit: `feat(boxes_client): codec registry + declared payload encoding`.
+- [ ] A new commit: `feat(visionist_client): codec registry + declared payload encoding`.
 
 ### Suggested order for the next session
 1. `codec.py` + `decode_with` (pure, no I/O) + unit test for each codec.

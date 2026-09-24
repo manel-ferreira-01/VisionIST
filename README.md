@@ -1,4 +1,4 @@
-# boxes
+# VisionIST
 
 A fleet of independent, Dockerized AI inference services — "boxes" — speaking
 one shared gRPC envelope, plus a thin, box-agnostic Python client that drives
@@ -22,10 +22,10 @@ orchestrator — boxes stay independent, addressable, composable units, and the
 ## Calling a box
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")                      # any box, by IP:port
+b = Visionist("localhost:8061")                      # any box, by IP:port
 res = b.run(data   ={"images": [pathlib.Path("dog.jpg")]},
             config ={"lang_sam": {"command": "segment",
                                   "parameters": {"box_threshold": 0.3,
@@ -36,7 +36,7 @@ print(res.results)  # decoded payload (the box declared "encoding": "zstd_pickle
 ```
 
 That's the entire end-user surface — zero box knowledge in the call.
-Details: [boxes_client/README.md](boxes_client/README.md).
+Details: [visionist_client/README.md](visionist_client/README.md).
 
 ## Quick start
 
@@ -104,11 +104,11 @@ Start in [docs/index.md](docs/index.md):
   Dockerfile templates used by the boxes in this repo
 - [CODECS](docs/CODECS.md) — self-describing payload decoding
 - [webui](webui/README.md) — declarative web layer over the fleet (HTTP API on
-  top of `boxes_client`; box knowledge lives in YAML definitions)
+  top of `visionist_client`; box knowledge lives in YAML definitions)
 
 ## Tests
 
-- **Client** — `boxes_client/tests/`: `fake_box_smoke.py` (in-process fake
+- **Client** — `visionist_client/tests/`: `fake_box_smoke.py` (in-process fake
   boxes, no GPU) and `codec_smoke.py` (the declared-encoding contract), plus
   `live_tapnext.py` against a real box.
 - **Boxes** — each box ships `images/<name>/test/test_<name>.py`, pointable at

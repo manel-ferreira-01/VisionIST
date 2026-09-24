@@ -79,7 +79,7 @@ def build(data: Optional[Dict[str, Any]] = None,
 def _load_images(images: Union[str, bytes, Sequence]) -> List[bytes]:
     """Normalize an ``images`` argument into a list of bytes.
 
-    Used by the image-box conveniences (:mod:`boxes_client.conveniences`), so a
+    Used by the image-box conveniences (:mod:`visionist_client.conveniences`), so a
     bare ``str`` here is treated as a **local file path** to serialize (distinct
     from the generic ``run`` contract where ``str`` means a literal string).
     Accepts:

@@ -1,4 +1,4 @@
-# boxes fleet
+# VisionIST fleet
 
 Spin up several boxes at once and drive them all with **one** generic client —
 the concrete proof that the core is box-agnostic.
@@ -8,7 +8,7 @@ the concrete proof that the core is box-agnostic.
 | file              | purpose |
 |-------------------|---------|
 | `docker-compose.yml` | launches 9 real boxes (clip, textEmbedding, tapnext, lang_segm, opencv, vggt, moge, yolo, lightglue) on host ports 9061–9069, all on the shared `PipelineService` interface |
-| `hello.py`        | the *minimal* end-user interface: one list of `(name, address, data, config)` specs, one `Box.run(...)` per box |
+| `hello.py`        | the *minimal* end-user interface: one list of `(name, address, data, config)` specs, one `Visionist.run(...)` per box |
 
 ## Use
 
@@ -26,7 +26,7 @@ docker compose down           # stop
   *caller-chosen* section key (`clip`, `tapnext`, …) and as addresses — the
   client never branches on them. Swap the model behind a box, or add a new box,
   and nothing in the calling code changes.
-- **One interface, many payloads.** The same `Box.run(data, config)` carries
+- **One interface, many payloads.** The same `Visionist.run(data, config)` carries
   images, text, tensors and zstd+pickled mask blobs — whatever each box returns
   comes back in `res.fields`, best-effort decoded.
 - **Conveniences are optional and separate.** `trace(box, ...)` (tapnext) is

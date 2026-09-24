@@ -120,7 +120,7 @@ decodes it into ordered frames on the server side (mirroring the yolo box) and
 feeds them through the exact same per-frame tracker:
 
 ```python
-video_bytes = open("cozinha.mp4", "rb").read()   # or pathlib.Path(...) via boxes_client
+video_bytes = open("cozinha.mp4", "rb").read()   # or pathlib.Path(...) via visionist_client
 
 request = proto.Envelope(
     config_json=json.dumps({
@@ -147,10 +147,10 @@ involved: the id is an opaque **capability string** — knowing it is enough to
 run against that session, and it is the only way to name one.
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:9063")
+b = Visionist("localhost:9063")
 
 # Student "alice" tracks — her session is created on first use
 res = b.run(

@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Assumes Docker. `pip install -e boxes_client` for the client (the
+Assumes Docker. `pip install -e visionist_client` for the client (the
 recommended way to talk to any box).
 
 ## 1. Run an existing box
@@ -24,10 +24,10 @@ docker run -d -p 9062:8061 ...   # clip on     host :9062
 ## 2. Call it
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 print(b.info())   # reachability + reflection check
 res = b.run(
     data   = {"images": [pathlib.Path("dog.jpg")]},
@@ -197,8 +197,8 @@ python test/test_<name>.py
 
 # client check
 python - <<'PY'
-from boxes_client import Box, pathlib
-b = Box("localhost:8061")
+from visionist_client import Visionist, pathlib
+b = Visionist("localhost:8061")
 print(b.info())
 print(b.run(data={"images": [pathlib.Path("x.jpg")]},
             config={"my_box": {"command": "do_it", "parameters": {}}}).config)
@@ -227,5 +227,5 @@ That one file tells you whether the box is done.
 - **Box contract & conventions**: [gRPC_Services_Reference](gRPC_Services_Reference.md)
 - **Whole-box mental model**: [Architecture_Overview](Architecture_Overview.md)
 - **Docker build templates**: [Docker_Image_Template_Guide](Docker_Image_Template_Guide.md)
-- **Client details**: [`boxes_client/README.md`](../boxes_client/README.md)
+- **Client details**: [`visionist_client/README.md`](../visionist_client/README.md)
 - **A box's exact API**: `images/<name>/README.md`

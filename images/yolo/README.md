@@ -6,7 +6,7 @@ stable per-session track id** — and returns per-frame detection records plus
 optionally annotated frames (annotated with id labels).
 
 The box speaks the shared **envelope** interface, so it is addressable
-through `boxes_client` exactly like clip:
+through `visionist_client` exactly like clip:
 
 ```python
 service PipelineService {
@@ -164,13 +164,13 @@ across frames *and* across calls — that's what makes a video's detections
 joinable into trajectories. A fresh session (or after `reset`) starts
 numbering from the base.
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 
 # --- images ---------------------------------------------------------
 res = b.run(

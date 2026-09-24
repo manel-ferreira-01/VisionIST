@@ -1,12 +1,12 @@
 """Box-specific *conveniences* -- NOT part of the agnostic core.
 
-The core of ``boxes_client`` (``box.py`` / ``envelope.py`` / ``result.py`` /
+The core of ``visionist_client`` (``box.py`` / ``envelope.py`` / ``result.py`` /
 ``decode_util.py``) is deliberately box-agnostic: it only knows *how* to build
 an ``Envelope`` and send it over the shared ``PipelineService`` interface, and
 *how* to read a ``Result`` back. It knows **no box name, field name, or model**.
 
 This module is the opposite, on purpose: it encodes knowledge about a *specific*
-box and only composes the generic ``Box.run`` / ``Box.reset`` primitives.  The
+box and only composes the generic ``Visionist.run`` / ``Visionist.reset`` primitives.  The
 tapnext point-tracking helper :func:`trace` lives here.
 
 If you add a convenience for another box (``segment``, ``embed``, ``detect``,
@@ -72,7 +72,7 @@ def trace(
     Parameters
     ----------
     box:
-        A :class:`boxes_client.Box` pointed at a tapnext box.
+        A :class:`visionist_client.Visionist` pointed at a tapnext box.
     images:
         A single local path / pre-encoded bytes, or a list of either.
     grid_size:

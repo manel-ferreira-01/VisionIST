@@ -5,7 +5,7 @@ A gRPC box that runs **LangSAM** (Language Segment Anything — SAM 2.1
 prompt.
 
 The box speaks the shared **envelope** interface, so it is addressable through
-`boxes_client` exactly like tapnext, clip, and sbert:
+`visionist_client` exactly like tapnext, clip, and sbert:
 
 ```python
 service PipelineService {
@@ -63,7 +63,7 @@ memory.
 
 - `data["images"]` — list of image bytes (JPEG/PNG).
 - `config["lang_sam"]["command"]` — `"segment"` (default) or `"reset"`
-  (no-op; the box is stateless, but `reset_first` from `boxes_client`
+  (no-op; the box is stateless, but `reset_first` from `visionist_client`
   stays safe).
 - `config["lang_sam"]["parameters"]` — optional:
   - `device` — explicit target, e.g. `"cpu"` or `"cuda:0"`. When omitted
@@ -99,7 +99,7 @@ format `{"parameters": {...}, "text_prompt": [...]}`.
 | `results` | `zstd.compress(pickle.dumps(list))`     | one `LangSAM.predict()` output dict per input image (masks, bboxes, scores, …) |
 
 The response config declares the encoding — `"encoding": "zstd_pickle"` —
-under the `lang_sam` section, so `boxes_client` decodes it for you (the
+under the `lang_sam` section, so `visionist_client` decodes it for you (the
 client never guesses). With raw bytes (without the client, or with
 an old client/image that predates the declaration) use the generic
 `zstd_pickle` contract:
@@ -122,12 +122,12 @@ Statuses reported in `config["lang_sam"]["status"]`:
 Image-less envelopes (config only) are echoed back unchanged — some pipeline
 stages forward bare envelopes and that behavior is preserved.
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = b.run(
     data={"images": ["car.jpg"]},                     # local paths -> bytes
     config={"lang_sam": {
@@ -144,7 +144,7 @@ out_list = res.results
 print([len(o["masks"]) for o in out_list])
 
 # (Manual unwrap — only if talking to an image that predates the
-#  encoding declaration, or without boxes_client:)
+#  encoding declaration, or without visionist_client:)
 # import pickle, zstandard as zstd
 # out_list = pickle.loads(zstd.ZstdDecompressor().decompress(res.results))
 ```

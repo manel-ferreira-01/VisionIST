@@ -1,4 +1,4 @@
-/** Shared API + types for the boxes-webui backend.
+/** Shared API + types for the visionist-webui backend.
  *  Wire contract documented in webui/README.md (API + wire rules). */
 
 // ---------------------------------------------------------------- definitions

@@ -2,7 +2,7 @@
 
 The definitions are the *only* place in the webui where a box gets named.
 Everything else — the API, the serializer, the SPA widgets/visualizers —
-operates on these generic models.  This mirrors ``boxes_client``'s rule:
+operates on these generic models.  This mirrors ``visionist_client``'s rule:
 the core stays **box-agnostic**; per-box knowledge is data, not code.
 """
 

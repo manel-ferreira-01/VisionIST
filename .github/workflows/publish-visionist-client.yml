@@ -1,20 +1,20 @@
-# Publish boxes-client to PyPI.
+# Publish visionist-client to PyPI.
 #
-# Trigger: a git tag shaped like `boxes-client-vX.Y.Z`, e.g.:
-#     git tag boxes-client-v0.1.2 && git push origin boxes-client-v0.1.2
+# Trigger: a git tag shaped like `visionist-client-vX.Y.Z`, e.g.:
+#     git tag visionist-client-v0.1.2 && git push origin visionist-client-v0.1.2
 #
 # Flow: check tag version == pyproject version -> build sdist+wheel ->
 #       test (plain install, then +torch) -> twine upload.
 #
 # Required repo secret: PYPI_API_TOKEN  (settings -> secrets and variables -> actions)
-# Use a token scoped to the `boxes-client` release if the PyPI UI offers it.
+# Use a token scoped to the `visionist-client` release if the PyPI UI offers it.
 
-name: publish boxes-client
+name: publish visionist-client
 
 on:
   push:
     tags:
-      - "boxes-client-v*"
+      - "visionist-client-v*"
 
 permissions:
   contents: read
@@ -37,10 +37,10 @@ jobs:
       - name: Check tag version matches pyproject
         shell: bash
         run: |
-          expected="${GITHUB_REF_NAME#boxes-client-v}"
-          actual="$(python3 -c "import tomllib; print(tomllib.load(open('boxes_client/pyproject.toml','rb'))['project']['version'])")"
+          expected="${GITHUB_REF_NAME#visionist-client-v}"
+          actual="$(python3 -c "import tomllib; print(tomllib.load(open('visionist_client/pyproject.toml','rb'))['project']['version'])")"
           if [ "$expected" != "$actual" ]; then
-            echo "::error::tag version (v${expected}) does not match boxes_client/pyproject.toml (${actual}) — bump the version, commit, and tag that version"
+            echo "::error::tag version (v${expected}) does not match visionist_client/pyproject.toml (${actual}) — bump the version, commit, and tag that version"
             exit 1
           fi
 
@@ -48,27 +48,27 @@ jobs:
         run: python3 -m pip install --upgrade pip build twine
 
       - name: Build sdist + wheel
-        working-directory: boxes_client
+        working-directory: visionist_client
         run: python3 -m build
 
-      # Plain install first: this is exactly what a `pip install boxes-client`
+      # Plain install first: this is exactly what a `pip install visionist-client`
       # user gets (no torch). Tests must pass there.
       - name: Install wheel (no torch) + test
         run: |
           # NB: leave the glob UNquoted so bash expands it to the one wheel.
-          python3 -m pip install boxes_client/dist/*-py3-none-any.whl
-          python3 boxes_client/tests/fake_box_smoke.py
-          python3 boxes_client/tests/codec_smoke.py
+          python3 -m pip install visionist_client/dist/*-py3-none-any.whl
+          python3 visionist_client/tests/fake_box_smoke.py
+          python3 visionist_client/tests/codec_smoke.py
 
       # Then the torch path (CPU wheels only — no CUDA image needed in CI).
       - name: Add torch (CPU) + re-test
         run: |
           python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python3 boxes_client/tests/fake_box_smoke.py
-          python3 boxes_client/tests/codec_smoke.py
+          python3 visionist_client/tests/fake_box_smoke.py
+          python3 visionist_client/tests/codec_smoke.py
 
       - name: Upload to PyPI
-        working-directory: boxes_client
+        working-directory: visionist_client
         env:
           TWINE_USERNAME: "__token__"
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

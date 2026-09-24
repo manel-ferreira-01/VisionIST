@@ -1,4 +1,4 @@
-# boxes-webui
+# visionist-webui
 
 > **Status: current** — backend (52 tests, live-verified) and the
 > SPA (`web/`: fleet page, def-driven console, all 11 visualizers) are built,
@@ -9,16 +9,16 @@
 > [../docs/Webui_Guide.md](../docs/Webui_Guide.md).
 
 A declarative web layer over a fleet of **boxes**: a box-agnostic core,
-YAML box definitions, HTTP API, and `boxes_client` under the hood.
+YAML box definitions, HTTP API, and `visionist_client` under the hood.
 
 ```
    browser / curl ──HTTP──▶ webui (FastAPI, core/*, boxes_agnostic)
                                   │
-                                  ▼  boxes_client.Box.run(...)
+                                  ▼  visionist_client.Visionist.run(...)
    box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · yolo
 ```
 
-**Design rule (inherited from `boxes_client`):** the core is *smart about
+**Design rule (inherited from `visionist_client`):** the core is *smart about
 shape, dumb about content*. Nothing in `src/webui/` names a box. All box
 knowledge lives in [`boxes/*.yaml`](boxes/) — the same data-driven contract,
 so *adding a box = one YAML file*, never code.
@@ -48,7 +48,7 @@ and Python ≥ 3.10.
 
 ```bash
 # 1) deps (client first, editable, from the repo)
-pip install -e boxes_client
+pip install -e visionist_client
 pip install -e webui            # pulls fastapi/uvicorn/pydantic/yaml/...
 
 # 2) seed the fleet (optional but convenient)
@@ -63,7 +63,7 @@ cat > data/fleet.json <<'EOF'
 EOF
 
 # 3) run
-boxes-webui                       # = uvicorn, WEBUI_HOST/PORT (default 127.0.0.1:8080)
+visionist-webui                       # = uvicorn, WEBUI_HOST/PORT (default 127.0.0.1:8080)
 
 # 4) talk to it
 curl -s localhost:8080/                        # health + def ids
@@ -101,7 +101,7 @@ section), `declared_encoding` (the codec the box declared, verbatim),
 | POST | `/api/fleet` | add `{name, addr, def_id?, note?}` |
 | PATCH | `/api/fleet/{id}` | rename / move / re-point def |
 | DELETE | `/api/fleet/{id}` | remove |
-| POST | `/api/fleet/{id}/probe?timeout=` | reachability + gRPC reflection (`Box.info()`) |
+| POST | `/api/fleet/{id}/probe?timeout=` | reachability + gRPC reflection (`Visionist.info()`) |
 | POST | `/api/upload` | multipart file → `{"ref": "@upl_…"}` |
 | GET | `/api/file/{token}` | fetch any artifact (upload or result payload) |
 | POST | `/api/call` | `{fleet_id, data, parameters, section, command, action, session_id}` |
@@ -160,7 +160,7 @@ python -m pytest tests/ -q          # 52 tests: registry, caller (pure), API e2e
 ```
 
 E2E tests spin up real fake boxes over gRPC (the `fake_box_smoke.py` pattern)
-and drive them through the full HTTP → core → `boxes_client` → box →
+and drive them through the full HTTP → core → `visionist_client` → box →
 serialize path — including a box that answers `status: error` in-band.
 
 ## Layout
@@ -178,7 +178,7 @@ webui/
 │   │   ├── caller.py         # build_call() pure / execute() wire (the only gRPC)
 │   │   ├── serialize.py      # Result -> JSON + artifacts (never raises)
 │   │   ├── artifact.py       # token store (TTL + cap), uploads & heavy fields
-│   │   └── fleet.py          # fleet.json CRUD + Box.info() probes
+│   │   └── fleet.py          # fleet.json CRUD + Visionist.info() probes
 │   └── api/                  # FastAPI routes: defs / fleet / call
 └── tests/                    # registry · caller · API e2e (fake boxes, real gRPC)
 ```

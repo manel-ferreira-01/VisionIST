@@ -37,7 +37,7 @@ _IDLE_TIMEOUT = 60  # seconds
 # old callers keep working (same alias pattern as lang_segm).
 _BOX_KEYS = ("vggt", "aispgradio")
 
-#: Declared payload encoding (boxes_client contract): the tensors travel as
+#: Declared payload encoding (visionist_client contract): the tensors travel as
 #: torch.save()-format bytes, the GLB is a raw binary blob (identity — the
 #: explicit declaration is what keeps the client's legacy guess-chain from
 #: mis-decoding the glTF binary as a float buffer).

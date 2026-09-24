@@ -17,7 +17,7 @@ Contract (see docs/gRPC_Services_Reference.md):
   ``"error"`` on failure), plus ``runtime`` and box-specific fields.
 * the response declares its payload encoding (``"encoding": {field: codec}``):
   all feature outputs are ``np.save`` (``.npy``) blobs declared ``numpy`` —
-  ``boxes_client`` decodes them to ``np.ndarray`` keeping their shape.
+  ``visionist_client`` decodes them to ``np.ndarray`` keeping their shape.
 * ``parameters.device`` (optional; ``"cpu"`` / ``"cuda"`` / ``"cuda:0"``)
   wins over the default (CUDA if visible) for the LightGlue models.
 * GPU lifecycle (fleet convention): LightGlue loads lazily on first use,

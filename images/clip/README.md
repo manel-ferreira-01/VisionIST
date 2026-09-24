@@ -4,7 +4,7 @@ A gRPC box that encodes images and/or text with CLIP and returns the image
 embedding, the text embedding, and the cross-modal similarity logits.
 
 The box speaks the shared **envelope** interface, so it is addressable through
-`boxes_client` exactly like tapnext:
+`visionist_client` exactly like tapnext:
 
 ```python
 service PipelineService {
@@ -55,7 +55,7 @@ Two fields in `data`, and a small `config`:
 - `data["images"]` -- list of image bytes (JPEG/PNG).
 - `data["texts"]` -- list of strings.
 - `config["clip"]["command"]` -- `"encode"` (default) or `"reset"` (no-op,
-  the box is stateless, but `reset_first` from `boxes_client` stays safe).
+  the box is stateless, but `reset_first` from `visionist_client` stays safe).
 - `config["clip"]["parameters"]["model"]` -- accepted for API consistency; the
   box runs the checkpoint loaded at startup (`ViT-B/32`).
 
@@ -70,12 +70,12 @@ Two fields in `data`, and a small `config`:
 | `text_emb`   | `[num_texts, 512]`     | CLIP text embeddings            |
 | `similarity` | `[num_images, num_texts]` | cross-modal logits          |
 
-## Call with boxes_client
+## Call with visionist_client
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 res = b.run(
     data={
         "images": ["car.jpg", "dog.jpg"],        # local paths -> bytes

@@ -1,4 +1,4 @@
-name: boxes-fleet
+name: visionist-fleet
 
 # Local-build fleet: every service is built from its box's own directory
 # (../images/<box> using docker/Dockerfile) and run under a local tag — no
@@ -30,8 +30,8 @@ services:
   clip:
     <<: *gpu
     build: { context: ../images/clip,          dockerfile: docker/Dockerfile }
-    image: boxes-local/clip
-    container_name: box-clip
+    image: visionist-local/clip
+    container_name: visionist-clip
     ports: ["9061:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -39,8 +39,8 @@ services:
   textembedding:
     <<: *gpu
     build: { context: ../images/textEmbedding, dockerfile: docker/Dockerfile }
-    image: boxes-local/textembedding
-    container_name: box-textembedding
+    image: visionist-local/textembedding
+    container_name: visionist-textembedding
     ports: ["9062:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -48,8 +48,8 @@ services:
   tapnext:
     <<: *gpu
     build: { context: ../images/tapnext_tracker, dockerfile: docker/Dockerfile }
-    image: boxes-local/tapnext
-    container_name: box-tapnext
+    image: visionist-local/tapnext
+    container_name: visionist-tapnext
     ports: ["9063:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -57,8 +57,8 @@ services:
   lang_sam:
     <<: *gpu
     build: { context: ../images/lang_segm,     dockerfile: docker/Dockerfile }
-    image: boxes-local/lang_sam
-    container_name: box-lang_sam
+    image: visionist-local/lang_sam
+    container_name: visionist-lang_sam
     ports: ["9064:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -66,8 +66,8 @@ services:
   opencv:
     <<: *gpu
     build: { context: ../images/opencv_box,    dockerfile: docker/Dockerfile }
-    image: boxes-local/opencv
-    container_name: box-opencv
+    image: visionist-local/opencv
+    container_name: visionist-opencv
     ports: ["9065:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -77,8 +77,8 @@ services:
   vggt:
     <<: *gpu
     build: { context: ../images/vggt,          dockerfile: docker/Dockerfile }
-    image: boxes-local/vggt
-    container_name: box-vggt
+    image: visionist-local/vggt
+    container_name: visionist-vggt
     ports: ["9066:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -87,8 +87,8 @@ services:
   moge:
     <<: *gpu
     build: { context: ../images/moge_box,      dockerfile: docker/Dockerfile }
-    image: boxes-local/moge
-    container_name: box-moge
+    image: visionist-local/moge
+    container_name: visionist-moge
     ports: ["9067:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -96,8 +96,8 @@ services:
   yolo:
     <<: *gpu
     build: { context: ../images/yolo,          dockerfile: docker/Dockerfile }
-    image: boxes-local/yolo
-    container_name: box-yolo
+    image: visionist-local/yolo
+    container_name: visionist-yolo
     ports: ["9068:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped
@@ -105,8 +105,8 @@ services:
   lightglue:
     <<: *gpu
     build: { context: ../images/lightglue_box, dockerfile: docker/Dockerfile }
-    image: boxes-local/lightglue
-    container_name: box-lightglue
+    image: visionist-local/lightglue
+    container_name: visionist-lightglue
     ports: ["9069:8061"]
     environment: [ PORT=8061 ]
     restart: unless-stopped

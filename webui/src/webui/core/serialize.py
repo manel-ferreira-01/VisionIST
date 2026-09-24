@@ -1,7 +1,7 @@
-"""Serialize a decoded ``boxes_client.Result`` into JSON + artifacts.
+"""Serialize a decoded ``visionist_client.Result`` into JSON + artifacts.
 
 Decoding is *always* the box's job (its declared ``encoding`` codec, via
-``boxes_client``).  This module only shapes the decoded objects for the SPA:
+``visionist_client``).  This module only shapes the decoded objects for the SPA:
 
 * small JSON-able values (scalars, ≤ 65 536 elements)   -> inline
 * numeric arrays/masks/tensors beyond that              -> raw buffer artifact (``kind: "buffer"``)
@@ -207,7 +207,7 @@ def _extract_status(config: Any) -> dict:
 
 
 def serialize_result(res: Any, store: ArtifactStore) -> dict:
-    """``res`` is a ``boxes_client.Result``.  Returns a JSON-safe dict plus
+    """``res`` is a ``visionist_client.Result``.  Returns a JSON-safe dict plus
     the artifacts it referenced."""
     fields = {}
     for name, value in (res.fields or {}).items():

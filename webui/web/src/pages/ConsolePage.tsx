@@ -159,7 +159,7 @@ function Console({ def }: { def: BoxDef }) {
   // returns tracks spanning the dead frames + the new ones (nonsense).
   // So: fresh box session per (re)mount — viewer and box stay in sync —
   // and `regenerate` restarts mid-sequence the same way.
-  const sessionKey = `boxes-webui-session-${def.id}-${fleetId}`;
+  const sessionKey = `visionist-webui-session-${def.id}-${fleetId}`;
 
   useEffect(() => {
     if (!def.session) return;

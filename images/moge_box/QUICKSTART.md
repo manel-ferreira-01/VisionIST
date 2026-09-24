@@ -22,10 +22,10 @@ First run downloads the model (~2GB for moge-3-vitl) from HuggingFace.
 ## Call It
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-box = Box("localhost:9067")
+box = Visionist("localhost:9067")
 
 res = box.run(
     data={"images": [pathlib.Path("image.jpg")]},
@@ -99,18 +99,18 @@ Edit `docker/Dockerfile` argument `MODEL_REPO`:
 ## Example: Compose with Other Boxes
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
 # Get geometry
-moge = Box("localhost:9067")
+moge = Visionist("localhost:9067")
 geometry = moge.run(
     data={"images": [pathlib.Path("img.jpg")]},
     config={"moge": {"parameters": {"refine_steps": 3}}}
 )
 
 # Get semantic understanding
-clip = Box("localhost:9061")
+clip = Visionist("localhost:9061")
 embeddings = clip.run(
     data={"images": [pathlib.Path("img.jpg")]},
     config={"clip": {"command": "encode"}}

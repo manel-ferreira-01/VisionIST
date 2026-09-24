@@ -1,6 +1,6 @@
 # Envelope & Box Contract Reference
 
-How boxes actually speak to each other and to `boxes_client`. This is the
+How boxes actually speak to each other and to `visionist_client`. This is the
 contract — when you build a box or a client, match **this**, not the historical
 examples.
 
@@ -127,7 +127,7 @@ Codec vocabulary (generic names, pure `bytes -> object`; full design in
 | `numpy`       | `numpy.save` (`.npy`) blob, or plain float32 buffer (legacy) | `np.ndarray`                  |
 | `zstd_pickle` | `zstd.compress(pickle.dumps(...))` | decoded Python (usually `list`) |
 
-`boxes_client` decodes declared fields directly (`res.encoding` exposes
+`visionist_client` decodes declared fields directly (`res.encoding` exposes
 what was declared); a box that declares nothing — or a codec whose library
 is missing — still returns usable raw `bytes`, and old clients that ignore
 the key keep decoding by their legacy JSON → torch → numpy → raw guess
@@ -166,13 +166,13 @@ Standard boxes answer `Process` with a namespaced status:
 
 ## Calling a box
 
-### Primary: `boxes_client`
+### Primary: `visionist_client`
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-b = Box("localhost:8061")                 # or 10.0.0.5:8061
+b = Visionist("localhost:8061")                 # or 10.0.0.5:8061
 # quick reachability check (uses gRPC reflection)
 print(b.info())
 
@@ -190,7 +190,7 @@ print(res.config)        # {"lang_sam": {"status": "done", "runtime": …, …}}
 print(res.results)       # decoded: list of LangSAM.out dicts
 ```
 
-Client rules (full doc: [`boxes_client/README.md`](../boxes_client/README.md)):
+Client rules (full doc: [`visionist_client/README.md`](../visionist_client/README.md)):
 
 - `str` in `data` = **literal** string (not a file). For files, pass
   `pathlib.Path` or raw `bytes`.
@@ -232,9 +232,9 @@ python images/<name>/test/test_<name>.py
 
 # 3) call from the client (fastest sanity check)
 python - <<'PY'
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
-b = Box("localhost:8061")
+b = Visionist("localhost:8061")
 print(b.info())
 print(b.run(data={"images":[pathlib.Path("test.jpg")]},
             config={"my_box":{"command":"segment","parameters":{}}}).config)

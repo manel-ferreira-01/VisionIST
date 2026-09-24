@@ -1,5 +1,5 @@
 """Shared test fixtures: path setup + fake boxes (same pattern as
-``boxes_client/tests/fake_box_smoke.py``)."""
+``visionist_client/tests/fake_box_smoke.py``)."""
 
 import concurrent.futures as futures
 import io
@@ -51,7 +51,7 @@ class FakeBox:
 @pytest.fixture
 def std_pb():
     """Shared-envelope pb modules (the client's vendored gencode)."""
-    from boxes_client._pb_loader import get as get_pb
+    from visionist_client._pb_loader import get as get_pb
     return get_pb()
 
 

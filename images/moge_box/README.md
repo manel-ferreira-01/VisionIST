@@ -78,7 +78,7 @@ BOX_HOST=localhost:9067 python test/test_moge_box.py
 
 **Results** (decoded from `data.results`):
 
-When decoded (automatic with `boxes_client`), `results` is a list where each entry is:
+When decoded (automatic with `visionist_client`), `results` is a list where each entry is:
 
 ```python
 {
@@ -114,10 +114,10 @@ The `encoding` field in response config declares `"zstd_pickle"` so the client a
 ### Basic Inference (single image)
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
-box = Box("localhost:9067")
+box = Visionist("localhost:9067")
 
 res = box.run(
     data={"images": [pathlib.Path("image.jpg")]},
@@ -131,7 +131,7 @@ res = box.run(
     }}
 )
 
-# Decoded results (automatic with boxes_client)
+# Decoded results (automatic with visionist_client)
 print(res.config)  # {"moge": {"status": "done", "runtime": 2.34, ...}}
 print(res.results)  # [{'points': (H,W,3), 'depth': (H,W), ...}]
 
@@ -242,7 +242,7 @@ print(res.config)  # {"moge": {"status": "done", "action": "reset"}}
 
 ```bash
 # Install client first
-pip install -e boxes_client
+pip install -e visionist_client
 
 # Install MoGe-3 box requirements (requires CUDA 12.2 or adjust Dockerfile)
 pip install git+https://github.com/microsoft/MoGe.git
@@ -343,11 +343,11 @@ To switch model, edit `docker/Dockerfile` argument `MODEL_REPO` and rebuild.
 ### Example: Compose with `clip` for semantic understanding
 
 ```python
-from boxes_client import Box
+from visionist_client import Visionist
 import pathlib
 
 # 1. Get embeddings for text prompts
-clip_box = Box("localhost:9061")  # clip box
+clip_box = Visionist("localhost:9061")  # clip box
 clip_res = clip_box.run(
     data={"images": [pathlib.Path("image.jpg")],
           "texts": ["building", "tree", "person"]},
@@ -355,7 +355,7 @@ clip_res = clip_box.run(
 )
 
 # 2. Get geometry from image
-moge_box = Box("localhost:9067")
+moge_box = Visionist("localhost:9067")
 moge_res = moge_box.run(
     data={"images": [pathlib.Path("image.jpg")]},
     config={"moge": {"parameters": {"refine_steps": 3}}}
