@@ -65,8 +65,21 @@ def _file_ref(token: str, content_type: str, size: int, extra: Optional[dict] = 
     return out
 
 
-def _array_inline(v, dtype_name: str, shape: list, values: Any) -> dict:
-    return {"kind": "array", "dtype": dtype_name, "shape": list(shape), "values": values}
+def _itemsize(dtype_name: str) -> int:
+    _SIZES = {"bool": 1, "float16": 2, "uint8": 1, "int8": 1,
+              "int16": 2, "uint16": 2, "int32": 4, "uint32": 4,
+              "float32": 4, "int64": 8, "float64": 8}
+    return _SIZES.get(dtype_name, 4)
+
+
+def _array_inline(v, dtype_name: str, shape: list, values: Any, itemsize: int) -> dict:
+    # ``size`` = payload byte size, same contract as buffer/file refs — the
+    # SPA shows it in the tensor panel header.
+    numel = 1
+    for s in shape:
+        numel *= int(s)
+    return {"kind": "array", "dtype": dtype_name, "shape": list(shape),
+            "size": numel * itemsize, "values": values}
 
 
 def _buffer_ref(store: ArtifactStore, buf: bytes, dtype_name: str, shape: list) -> dict:
@@ -117,7 +130,7 @@ def _ser_tensor(v, store: ArtifactStore) -> dict:
         dname = arr.dtype.name
         if dname in _NUMPY_OK:
             if numel <= MAX_INLINE_ELEMENTS:
-                return _array_inline(None, dname, shape, arr.tolist())
+                return _array_inline(None, dname, shape, arr.tolist(), arr.dtype.itemsize)
             try:
                 return _buffer_ref(store, arr.tobytes(), dname, shape)
             except Exception:
@@ -125,7 +138,8 @@ def _ser_tensor(v, store: ArtifactStore) -> dict:
     # fallback: inline if small, else pickle
     try:
         if numel <= MAX_INLINE_ELEMENTS:
-            return _array_inline(None, dtype_name or "object", shape, t.tolist())
+            _d = "bool" if str(v.dtype) == "torch.bool" else (dtype_name or "object")
+            return _array_inline(None, _d, shape, t.tolist(), _itemsize(_d))
     except Exception:
         pass
     return _pickle_ref(store, v, "tensor that could not be array-ified")
@@ -136,7 +150,7 @@ def _ser_ndarray(v, store: ArtifactStore) -> dict:
     shape = list(v.shape)
     if dname in _NUMPY_OK:
         if v.size <= MAX_INLINE_ELEMENTS:
-            return _array_inline(None, dname, shape, v.tolist())   # bools stay bools
+            return _array_inline(None, dname, shape, v.tolist(), v.dtype.itemsize)   # bools stay bools
         return _buffer_ref(store, v.tobytes(), dname, shape)
     if dname == "object":
         vals = []

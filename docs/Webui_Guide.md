@@ -30,7 +30,7 @@ non-`Process` methods with a clear error until then).
 |---|---|
 | Backend | **52/52 tests green** (`python3 -m pytest tests/ -q` from `webui/`), live-verified against the running fleet (clip, lang_sam, tapnext; error paths 400/502) + an API-level vggt round trip (`fake_vggt`: namespaced call, torch tensors with full shape, GLB served as `model/gltf-binary`) + a live MoGe round trip through the `points` visualizer (701k reprojected points, photo-colored, no page errors — `webui/web/.moge_points_e2e.cjs`). The standard `yolo` box is covered by `boxes/yolo.yaml` + `test_yolo_detection_def` (registry) — a defs-only addition, no code. |
 | Frontend | `tsc --noEmit && vite build` clean; `web/dist` auto-mounted by the FastAPI app (API + `/docs` keep priority) |
-| Session fixes applied | ✅ tab-switch state leakage (console now remounts per def), ✅ video input for tapnext (`video_frames` widget), ✅ tapnext tracks `(y,x)` order corrected + per-frame visibility toggle, ✅ labeled/legend heatmaps (clip), ✅ input mosaic |
+| Session fixes applied | ✅ tab-switch state leakage (console now remounts per def), ✅ video input for tapnext (`video_frames` widget), ✅ tapnext tracks `(y,x)` order corrected + per-frame visibility toggle, ✅ labeled/legend heatmaps (clip), ✅ input mosaic, ✅ webui image now ships CPU `torch` — without it the `torch` codec silently degrades and tapnext/vggt tensors arrive as opaque `application/zip` files (dead tracks viewer, tensor panel without dtype/size/`.npy` button); ✅ inline array refs carry `size` (bytes) like buffer refs |
 
 Still **unverified in-browser / live**: vggt GLB orbit + tensor cards
 (the API path is covered by `fake_vggt`, but camera auto-fit still needs
@@ -43,7 +43,8 @@ standard `yolo` box covers object detection via `boxes/yolo.yaml`.
 ## 3. Run / build / test loop
 
 ```bash
-# deps (client first, editable)
+# deps (client first, editable; torch is optional but REQUIRED to decode
+# torch.save() payloads from tapnext/vggt — the container image ships it)
 pip install -e visionist_client && pip install -e webui
 
 # backend tests

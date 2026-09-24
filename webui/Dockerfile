@@ -43,7 +43,15 @@ COPY webui/web/dist/                      webui/web/dist/
 
 # Install the local client (satisfies webui's visionist-client dep, and keeps
 # the exact same gRPC stubs as the local wheel), then the webui.
+#
+# torch is REQUIRED to decode torch.save() payloads (tapnext/vggt/tapnext
+# tracks & visibles).  Without it the codec silently degrades to `identity`
+# and every tensor arrives at the SPA as an opaque `application/zip` file —
+# the tensor panel loses dtype/shape/size and its .npy download button, and
+# the tracks viewer gets nothing to play.  Use PyTorch's CPU wheel index:
+# webui is a CPU front-end and the CUDA build would add ~2 GB of nvidia libs.
 RUN pip install --no-cache-dir --upgrade pip \
+ &&  pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  &&  pip install --no-cache-dir ./visionist_client \
  &&  pip install --no-cache-dir -e ./webui
 
