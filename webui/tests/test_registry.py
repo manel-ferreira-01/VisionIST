@@ -154,9 +154,13 @@ def test_unimatch_is_dense_estimation(reg):
     params = {p.key for p in d.parameters}
     assert params == {"model", "inference_size", "padding_factor"}
     viz = {r.field: r.visualizer for r in d.results if r.field != "*"}
-    assert viz["flow"] == "flow_field"
-    assert viz["disparity"] == "field_map"
-    assert viz["depth"] == "field_map"
+    assert set(viz.values()) == {"tensor"}          # one generic tensor panel per output
+    # spatial semantics are declared data (params.spatial), never inferred:
+    # flow quiver over the first input image; scalar maps as heat
+    params = {r.field: r.params for r in d.results if r.field != "*"}
+    assert params["flow"].get("spatial") == "flow"
+    for f in ("occ_fwd", "occ_bwd", "disparity", "depth"):
+        assert params[f].get("spatial") == "heat"
     flow = next(r for r in d.results if r.field == "flow")
     assert flow.base == "images"   # quiver over the first uploaded image
     assert d.results[-1].field == "*"

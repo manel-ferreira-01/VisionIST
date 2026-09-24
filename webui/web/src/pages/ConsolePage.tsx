@@ -715,8 +715,24 @@ function ResultBlock({
         : null;
       return <FlowField value={v} base={base ?? null} title={title} />;
     }
-    case "tensor":
-      return <TensorView value={v} title={title} />;
+    case "tensor": {
+      // header + stats + dtype-faithful .npy download.  The def may declare
+      // spatial semantics (params.spatial): "flow" renders the dense (u,v)
+      // field as a quiver over the def's `base` image, "heat" an (H,W) heat
+      // preview — the semantics are declared data, not inferred from shape
+      const base = rd.base && current && current.images[0]
+        ? fileUrl(current.images[0])
+        : null;
+      const spatial = (rd.params ?? {})["spatial"];
+      return (
+        <TensorView
+          value={v}
+          title={title}
+          base={base ?? null}
+          spatial={typeof spatial === "string" ? spatial : null}
+        />
+      );
+    }
     case "overlay": {
       const items = v === undefined || v === null ? [] : Array.isArray(v) ? (v as unknown[]) : [v];
       return (

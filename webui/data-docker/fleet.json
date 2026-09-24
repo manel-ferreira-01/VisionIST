@@ -8,7 +8,7 @@
       "note": null,
       "added": 1790256113.4216843,
       "last_probe": {
-        "at": 1790259386.5486336,
+        "at": 1790273639.0720584,
         "addr": "clip:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -26,7 +26,7 @@
       "note": null,
       "added": 1790256113.421693,
       "last_probe": {
-        "at": 1790259386.5608346,
+        "at": 1790273639.0792913,
         "addr": "lang_sam:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -44,7 +44,7 @@
       "note": null,
       "added": 1790256113.4216971,
       "last_probe": {
-        "at": 1790259386.5709162,
+        "at": 1790273639.0782776,
         "addr": "moge:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -62,7 +62,7 @@
       "note": null,
       "added": 1790256113.4216912,
       "last_probe": {
-        "at": 1790259386.5581665,
+        "at": 1790273639.0902233,
         "addr": "tapnext:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -80,7 +80,7 @@
       "note": null,
       "added": 1790256113.4216888,
       "last_probe": {
-        "at": 1790259386.551406,
+        "at": 1790273639.0853267,
         "addr": "textembedding:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -98,7 +98,7 @@
       "note": "unified flow/stereo/depth",
       "added": 1790263679.778584,
       "last_probe": {
-        "at": 1790264003.6980996,
+        "at": 1790273639.090788,
         "addr": "unimatch:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -116,7 +116,7 @@
       "note": null,
       "added": 1790256113.4216952,
       "last_probe": {
-        "at": 1790259386.564208,
+        "at": 1790273639.0915987,
         "addr": "vggt:8061",
         "service": "pipeline.PipelineService",
         "methods": [
@@ -134,7 +134,7 @@
       "note": null,
       "added": 1790256113.421699,
       "last_probe": {
-        "at": 1790259386.5699995,
+        "at": 1790273639.092557,
         "addr": "yolo:8061",
         "service": "pipeline.PipelineService",
         "methods": [

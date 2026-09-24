@@ -11,7 +11,9 @@ note: >
   stereo needs the gmstereo checkpoint and a rectified left/right pair.
   Inputs larger than ~1.6 MP are auto-downscaled by the box (response
   config says auto_resized: true) unless you pass inference_size.
-input_mosaic: false   # the flow/stereo panels already show the inputs (base + result)
+  Results are tensors — each panel shows dtype/shape/size, value stats
+  and distribution, the spatial preview, and a one-click .npy download.
+input_mosaic: false   # the result panels already show the inputs (quiver base / heat)
 
 inputs:
   - field: images
@@ -48,22 +50,32 @@ parameters:
     widget: number
     default: 16
 
+# Tensor outputs — rendered by the `tensor` visualizer (dtype/shape/size +
+# value stats + distribution histogram + .npy download), with the
+# box-declared spatial preview (params.spatial):
+#   flow  -> quiver of the dense (u,v per pixel) field over the first input image
+#   heat  -> viridis heat image of the (H, W) field
 results:
   - field: flow
-    visualizer: flow_field
-    caption: "optical flow — first image → second"
-    base: images      # first uploaded image as the quiver background
+    visualizer: tensor
+    caption: "optical flow — first image → second (u, v per pixel)"
+    base: images            # first uploaded image = the quiver background
+    params: {spatial: flow}
   - field: occ_fwd
-    visualizer: field_map
+    visualizer: tensor
     caption: "forward-occlusion mask (1 = occluded; needs pred_bidir_flow)"
+    params: {spatial: heat}
   - field: occ_bwd
-    visualizer: field_map
+    visualizer: tensor
     caption: "backward-occlusion mask (1 = occluded; needs pred_bidir_flow)"
+    params: {spatial: heat}
   - field: disparity
-    visualizer: field_map
+    visualizer: tensor
     caption: "stereo disparity (px)"
+    params: {spatial: heat}
   - field: depth
-    visualizer: field_map
+    visualizer: tensor
     caption: "depth map (depth command only)"
+    params: {spatial: heat}
   - field: "*"
     visualizer: json
