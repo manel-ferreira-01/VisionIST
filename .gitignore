@@ -37,3 +37,7 @@ webui/data/
 build/
 __pycache__/
 
+# Secrets (DockTail OAuth creds, etc.)
+.env
+**/.env
+

@@ -1,0 +1,130 @@
+{
+  "entries": [
+    {
+      "id": "clip",
+      "name": "clip",
+      "addr": "clip:8061",
+      "def_id": "clip",
+      "note": null,
+      "added": 1790256113.4216843,
+      "last_probe": {
+        "at": 1790257618.5805476,
+        "addr": "clip:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "sbert",
+      "name": "sbert",
+      "addr": "textembedding:8061",
+      "def_id": "sbert",
+      "note": null,
+      "added": 1790256113.4216888,
+      "last_probe": {
+        "at": 1790257618.5860739,
+        "addr": "textembedding:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "tapnext",
+      "name": "tapnext",
+      "addr": "tapnext:8061",
+      "def_id": "tapnext",
+      "note": null,
+      "added": 1790256113.4216912,
+      "last_probe": {
+        "at": 1790257618.5902114,
+        "addr": "tapnext:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "lang-sam",
+      "name": "lang-sam",
+      "addr": "lang_sam:8061",
+      "def_id": "lang_sam",
+      "note": null,
+      "added": 1790256113.421693,
+      "last_probe": {
+        "at": 1790257618.592195,
+        "addr": "lang_sam:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "vggt",
+      "name": "vggt",
+      "addr": "vggt:8061",
+      "def_id": "vggt",
+      "note": null,
+      "added": 1790256113.4216952,
+      "last_probe": {
+        "at": 1790257618.5939708,
+        "addr": "vggt:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "moge",
+      "name": "moge",
+      "addr": "moge:8061",
+      "def_id": "moge",
+      "note": null,
+      "added": 1790256113.4216971,
+      "last_probe": {
+        "at": 1790257618.5951908,
+        "addr": "moge:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    },
+    {
+      "id": "yolo",
+      "name": "yolo",
+      "addr": "yolo:8061",
+      "def_id": "yolo",
+      "note": null,
+      "added": 1790256113.421699,
+      "last_probe": {
+        "at": 1790257618.5963035,
+        "addr": "yolo:8061",
+        "service": "pipeline.PipelineService",
+        "methods": [
+          "Process"
+        ],
+        "reflection": true,
+        "reachable": true
+      }
+    }
+  ]
+}

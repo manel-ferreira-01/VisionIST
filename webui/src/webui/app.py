@@ -50,13 +50,15 @@ def create_app(env: AppEnv | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/", include_in_schema=False)
-    def root():
+    @app.get("/api/service", include_in_schema=False)
+    @app.get("/service", include_in_schema=False)
+    def service_info():
         return {
             "service": "visionist-webui",
             "version": __version__,
             "defs": [d.id for d in registry],
             "endpoints": {
+                "service": "GET /api/service",
                 "defs": "GET /api/defs",
                 "fleet": "GET /api/fleet",
                 "call": "POST /api/call (see docs, or POST /api/upload first)",

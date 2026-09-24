@@ -38,7 +38,7 @@ def _seed(client, fake, name, def_id):
 # --------------------------------------------------------------------- root
 
 def test_root_lists_defs(client):
-    r = client.get("/")
+    r = client.get("/api/service")
     assert r.status_code == 200
     body = r.json()
     assert "lang_sam" in body["defs"] and "vggt" in body["defs"]
