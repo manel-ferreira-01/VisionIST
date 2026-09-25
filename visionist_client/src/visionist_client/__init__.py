@@ -34,9 +34,10 @@ if _os.path.isdir(_PB_DIR) and _PB_DIR not in _sys.path:
 from .box import Visionist
 from .result import Result
 from .envelope import load
-from .conveniences import trace  # optional, convenience layer (not core)
+from . import tracking  # box-agnostic feature tracing (edges -> tracks -> matrix)
+from .conveniences import trace, track_stream  # optional, convenience layer (not core)
 
-__all__ = ["Visionist", "Result", "load", "trace"]
+__all__ = ["Visionist", "Result", "load", "trace", "track_stream", "tracking"]
 
 try:
     from importlib.metadata import version as _dist_version

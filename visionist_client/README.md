@@ -92,6 +92,32 @@ knowledge, and it's safe to delete without touching the generic client. Add a
 sibling convenience (`segment`, `embed`, `detect`, …) for other boxes the same
 way; never put a box name in `box.py`.
 
+### 3. Convenience — `track_stream(box, frames, *, window=3, min_alive=2, mode="backbone", session_id="default", reset_first=True, **params)`
+An **optional** helper for the *lightglue* box: feed a sequence of frames
+(one per call, time-ordered) through the box's `stream` command in a single
+session, then build a **Tomasi‑Kanade observation matrix** — shape
+`(2F, kept)`, `P[2f]` = x / `P[2f+1]` = y per frame, **one column per
+tracked point**, `NaN` where the point is absent.
+
+```python
+from visionist_client import track_stream
+demo = track_stream(b, frames=["f0.jpg", "f1.jpg", "f2.jpg", "f3.jpg"],
+                    window=3, min_alive=2)   # mode: "backbone" | "greedy"
+demo.obs_matrix        # np.ndarray (2F, kept)
+print(demo)            # summary: components, kept/dropped, gap-bridged, per-frame
+```
+
+- **the `mode` toggle** — `"backbone"` (default): union-find candidate sets +
+  longest-path peeling; a point that blinks out for one frame is **re-linked
+  via Δ=2/3 matches** (NaN gap, one track). `"greedy"`: Δ=1 chains only; a
+  point that fails to match the next frame dies and re-appears as a new track.
+- `min_alive` — drop tracks seen in fewer frames (the "really big blobs"
+  resolve into clean per-point tracks; one node per frame is guaranteed).
+- The box-agnostic machinery (union-find, peeling, matrix) lives in
+  `visionist_client.tracking` — pure functions over match edges + per-frame
+  keypoints, unit-tested without a box (`tests/tracking_smoke.py`). The
+  convenience only knows the lightglue request/response shape.
+
 ### `Visionist.reset(config_key=None)`
 Sends `{config_key: {"command": "reset"}}` on `Process`. `config_key` is the
 box's section name (or the one from the constructor). Stateful boxes clear
@@ -180,6 +206,7 @@ reinterpret any 4-byte-aligned blob); boxes are expected to declare.
 | Box | In scope | Notes |
 |-----|----------|-------|
 | tapnext (`Process`) | ✅ | v1 target; `trace(box, ...)` convenience over `Visionist.run` |
+| lightglue_box (`Process`) | ✅ | `match` (features + `matches`/`confidence`) and `stream` (per-`session_id` sliding window); `track_stream(box, frames, ...) -> TrackResult` convenience turns a `stream` run into a cleaned observation matrix (`2F x tracks`, NaN gaps) — the box-agnostic machinery (union-find, longest-path peeling, `min_alive`) lives in `visionist_client.tracking`, toggle with `mode="backbone" | "greedy"` |
 | vggt, moege_box, clip, lang_segm, **yolo** (`Process`) | ✅ envelope shape | call via `Visionist.run(...)` with the box-specific `config`; `yolo` always tracks (per-session `track_id` in `detections`; `session_id`/`reset`/`list` like tapnext) and declares per-field `encoding` (`detections` json, `annotated` identity) |
 | opencv_box (`Process`) | ✅ | standard envelope: `match` / `similarity_check` / `reset` commands; `numpy` fields declared and decoded (np.save blobs), similarity frames as `identity` |
 | cotracker (`Forward`) | ⏸ pending | use `Visionist.run` after it's migrated to the shared envelope (client needs no changes) |
@@ -201,6 +228,9 @@ payload types, config shape) is fully generic.
 # in-process fake box (no GPU, no real box needed)
 python visionist_client/tests/fake_box_smoke.py
 
+# the box-agnostic tracker (synthetic edges — no box, GPU, or gRPC needed)
+python visionist_client/tests/tracking_smoke.py
+
 # real tapnext box at BOX_HOST:PORT
 BOX_HOST=localhost:8061 python visionist_client/tests/live_tapnext.py
 ```
@@ -221,3 +251,11 @@ BOX_HOST=localhost:8061 python visionist_client/tests/live_tapnext.py
 - **Forward boxes deferred.** cotracker / textEmbedding use bespoke
   `Forward` messages; they will work through this client with no changes once
   migrated to the shared envelope (clip is already migrated).
+- **Association is caller-side.** Stream boxes (lightglue, tapnext) return
+  what the model returns; turning those outputs into tracks is the caller's
+  job and lives here, not in the boxes. `visionist_client.tracking` is the
+  box-agnostic association core (union-find, longest-path peeling, `min_alive`,
+  the observation matrix) — pure functions over match edges + per-frame
+  keypoints, unit-tested with no box. `track_stream` is the lightglue-shaped
+  I/O wrapper around it (same rule as `trace` for tapnext): boxes stay thin
+  wrappers over their networks, tracking policy stays with the caller.

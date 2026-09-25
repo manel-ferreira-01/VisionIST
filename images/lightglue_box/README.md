@@ -209,6 +209,28 @@ for frame in frames:                            # e.g. a webcam / decoder loop
 # or all of them: b.run(config={"lightglue": {"command": "reset"}})
 ```
 
+### Or build a cleaned observation matrix from a stream
+
+If the goal is tracked points over a clip (not raw per-frame matches), the
+client ships a convenience that drives this box's `stream` and assembles a
+**Tomasi-Kanade observation matrix** (`2F x tracks`: x and y per frame, one
+column per tracked point, `NaN` where a point is absent) — see
+`visionist_client` README ("Convenience — `track_stream`"):
+
+```python
+from visionist_client import track_stream
+res = track_stream(b, frames=[f0, f1, f2, ...],       # one image per step
+                   window=3, min_alive=2)
+res.obs_matrix      # (2F, kept) ndarray
+# mode="backbone" (default): a point that blinks out for one frame is
+#   re-linked via the Δ=2/3 matches (one track, NaN gap)
+# mode="greedy":              Δ=1 chains; a point dies, then re-births
+```
+
+The box returns what the network returns; the association (union-find,
+longest-path peeling, `min_alive`) is pure client-side code in
+`visionist_client.tracking`, unit-tested without a box.
+
 ## GPU behaviour
 
 The models load **lazily on first use**, live on `parameters.device`
