@@ -84,6 +84,7 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 --ipc=host my_lang_segm
 | lightglue_box | GPU / CPU | Feature matching with LightGlue — SuperPoint/DISK features per image; for pairs, the matcher's `matches` (+ `confidence`) |
 | opencv_box | GPU / CPU | Feature extraction & matching (SIFT / ORB / LightGlue) |
 | moge_box | GPU | MoGe-3 monocular 3D geometry (depth / points / normals) — CUDA-only |
+| unimatch | GPU / CPU | Dense estimation with UniMatch — optical flow / stereo disparity / metric depth (flow model baked in; stereo/depth checkpoints on demand) |
 
 **The per-box README is the authoritative source for that box's request shape**
 (config keys, fields, status, how to decode `results`):

@@ -34,6 +34,7 @@ shared gRPC envelope, called by `visionist_client` or by orchestration-layer box
 | lightglue_box | GPU / CPU | Feature matching with LightGlue — SuperPoint/DISK features; for image pairs, the matcher's `matches` (+ `confidence`) |
 | opencv_box | GPU / CPU | Feature extraction & matching (SIFT / ORB / LightGlue) |
 | moge_box | GPU | **MoGe-3: Monocular 3D geometry (depth/points/normals)** |
+| unimatch | GPU / CPU | Dense estimation — optical flow / stereo disparity / metric depth (UniMatch) |
 
 **The per-box README is the authoritative source for that box's request shape**
 (config keys, fields, status, how to decode `results`):
