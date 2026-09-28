@@ -33,6 +33,62 @@ parameters:
     max: 64
     step: 2
     default: 32
+  - key: new_tracks
+    widget: number
+    min: 0
+    max: 1
+    step: 1
+    default: 0
+    placeholder: "growing point set: 1 = re-seed points as they die (then use the knobs below); 0 = legacy fixed grid"
+  - key: cell_size
+    widget: number
+    min: 8
+    max: 128
+    step: 8
+    default: 20
+    placeholder: "growing: grid cell size in 256² model space — EMPTY cells get re-seeded (smaller = finer coverage)"
+  - key: min_dist
+    widget: number
+    min: 2
+    max: 32
+    step: 1
+    default: 4
+    placeholder: "growing: a cell is occupied if a visible point is closer than this (px, 256-space)"
+  - key: add_interval
+    widget: number
+    min: 1
+    max: 60
+    step: 1
+    default: 5
+    placeholder: "growing: re-seed check every N frames"
+  - key: max_new_per_seed
+    widget: number
+    min: 1
+    max: 1024
+    step: 1
+    default: 256
+    placeholder: "growing: cap on new points per seed"
+  - key: max_total_points
+    widget: number
+    min: 64
+    max: 8192
+    step: 64
+    default: 4096
+    placeholder: "growing: hard cap on total track ids (growth stops when hit)"
+  - key: retire_after_invisible
+    widget: number
+    min: 0
+    max: 240
+    step: 5
+    default: 0
+    placeholder: "growing: drop a point-group after N fully-invisible frames (0 = never; set it on long videos)"
+  - key: backfill
+    widget: number
+    min: 0
+    max: 1
+    step: 1
+    default: 0
+    placeholder: "growing: 1 = new points get trajectories back to frame 0 (costs O(prefix) per seed)"
 
 session:
   key: session_id
@@ -48,10 +104,13 @@ session:
 results:
   - field: tracks
     visualizer: tensor
-    caption: "(frames, points, 2) track coordinates"
+    caption: "(frames, points, 2) track coordinates — with new_tracks the point count may have grown per frame"
   - field: visibles
     visualizer: tensor
-    caption: "(frames, points) visibility flags"
+    caption: "(frames, points) visibility flags — the validity mask (0 = not born / lost)"
+  - field: birth_frames
+    visualizer: tensor
+    caption: "per-track birth frame (column i of tracks = track id i) — only present with new_tracks"
   - field: "*"
     visualizer: tracks_player
     inputs:

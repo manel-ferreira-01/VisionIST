@@ -63,7 +63,7 @@ Use them; don't hand-roll the oneof.
 
 | Box (`images/…`) | Box key | Notes |
 |---|---|---|
-| tapnext_tracker | `tapnext` | stateful & **multi-session**: `session_id` (opaque string, omitted → shared `default` session) keys all state; `reset` clears that session only; `list` gives the operator the active sessions; input is `data.images` (a list of frames) **or** a single decoded `data.video` (the box decodes the video to ordered frames — mutually exclusive with `images`, `frame_step`/`max_frames` to sample); response declares `tracks`/`visibles`/`observation_matrix` as `torch` |
+| tapnext_tracker | `tapnext` | stateful & **multi-session**: `session_id` (opaque string, omitted → shared `default` session) keys all state; `reset` clears that session only; `list` gives the operator the active sessions; input is `data.images` (a list of frames) **or** a single decoded `data.video` (the box decodes the video to ordered frames — mutually exclusive with `images`, `frame_step`/`max_frames` to sample); response declares `tracks`/`visibles`/`observation_matrix` as `torch`; optional **`new_tracks`** growing path: the point set re-seeds from empty grid cells each seed horizon (fresh generations/ids, `birth_frames` + `num_generations` in config, `max_*` budgets, `retire_after_invisible`, optional `backfill`) |
 | clip | `clip` | stateless |
 | textEmbedding | `sbert` | stateless |
 | lang_segm | `lang_sam` | aliases accepted: `lang_segm`, `aispgradio`, or the legacy flat form |

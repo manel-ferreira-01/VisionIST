@@ -10,6 +10,11 @@ A gRPC service for TAPNext point tracking with streaming support, following the 
 - **Video input**: `data.video` — the box decodes the video into ordered frames
   on the server side and tracks them (same shape as yolo's `data.video`);
   `frame_step` / `max_frames` control the sampling
+- **Growing point set** (optional `new_tracks: true`): as tracked points get
+  lost, empty grid cells are re-seeded with fresh points — each seed is its
+  own TAPNext *generation* (surviving points keep their long-range memory),
+  with fresh track ids, optional retirement of dead generations, budgets, and
+  optional trajectory backfill (see [Growing point set](#growing-point-set-new_tracks-true))
 - **Multi-session (multi-tenant)**: one box serves many independent users at
   once — each `session_id` holds its own state, its own reset, and its own
   accumulation (see [Sessions](#sessions-sharing-one-box-with-many-users))
@@ -216,6 +221,17 @@ request = proto.Envelope(
 | `frame_step` | int | 1 | Video input: sample every Nth frame (1 = every frame) |
 | `max_frames` | int | 0 | Cap on the number of frames to track (video input; 0 = no cap) |
 
+| Parameter | Type | Default | Description (growing point set — only read when `new_tracks` is set) |
+|-----------|------|---------|-------------|
+| `new_tracks` | bool | `false` | Enable the growing path (legacy single-grid behaviour otherwise) |
+| `cell_size` | int | 20 | Grid cell size in 256×256 model space; **empty** cells get re-seeded |
+| `min_dist` | float | 4.0 | A cell is "occupied" if a *visible* tracked point is closer than this |
+| `add_interval` | int | 5 | Re-seed check is made every N frames (0 never) |
+| `max_new_per_seed` | int | 256 | Cap on new points per seed |
+| `max_total_points` | int | 4096 | Hard cap on total live track ids (growth stops when hit) |
+| `retire_after_invisible` | int | 0 (off) | A generation that is fully invisible for N straight frames is dropped — it stops costing model calls and VRAM from the next frame. 0 = generations live until reset (costs scale with the video) |
+| `backfill` | bool | `false` | A new generation is initialized over the session's stored prefix, so its columns are written into earlier frames (trajectory from frame 0) — costs O(length of prefix) per seed, and the box must then keep decoded frames per session (≈200 KB/frame). Default: a new point simply does not exist before its birth frame |
+
 ### Response Format
 
 Response includes all tracked points and the Tomasi-Kanade observation matrix:
@@ -254,6 +270,65 @@ Response data contains:
 - `tracks`: Float32 array of shape (frame_count, num_points, 2)
 - `visibles`: Float32 array of track visibility logits  
 - `observation_matrix`: Tomasi-Kanade P matrix (2×frames × num_points) for factorization
+
+### Growing point set (`new_tracks: true`)
+
+By default the box seeds `grid_size²` points on the session's first frame and
+never re-adds points — `tracks` is a uniform `(F, N, 2)` and `num_points` is
+constant. With `"new_tracks": true` the point set **grows**:
+
+- every `add_interval` frames the box looks at the 256×256 grid and re-seeds
+  **empty cells** (no *visible* tracked point within `min_dist`) with up to
+  `max_new_per_seed` new points, capped at `max_total_points` total ids.
+  If all points die, the next seed horizon re-samples the (empty) grid —
+  the tracker self-heals instead of idling.
+- each seed is a new **generation** with fresh track ids assigned after the
+  existing ones; column `i` of `tracks` **is** track id `i` in *every* frame
+  (stable for the whole session — survivors are never re-indexed).
+- a point seeded at frame `k` does not exist before `k`: frames `0…k-1`
+  carry `0.0` in `tracks`, `0` in `visibles`, `NaN` in `observation_matrix`
+  for that column. `visibles` is the validity mask; **`data.birth_frames`**
+  (a typed list, one first-frame per track id) and the config's compact
+  **`"birth_hist"`** (frame → how many points were seeded then) separate
+  "not yet born" from "born but lost".
+- optional `retire_after_invisible` drops a generation after N fully
+  invisible consecutive frames (its last recorded positions stay; it costs
+  nothing after — this is what keeps long videos affordable).
+- optional `backfill` writes a new generation's recorded trajectory into the
+  earlier frames instead (its columns are finite from frame 0; costs O(prefix)
+  per seed).
+
+The response shape in growing mode:
+
+```json
+{
+  "tapnext": {
+    "status": "done",
+    "session": "alice-2025",
+    "frames_processed": 60,
+    "runtime": 12.3,
+    "num_points": 1120,              // max total track ids (may have grown)
+    "new_tracks": true,
+    "num_generations": 4,            // live generations right now
+    "birth_hist": {"0": 1024, "30": 32, "55": 32},   // compact growth summary
+    "encoding": { "tracks": "torch", "visibles": "torch",
+                  "observation_matrix": "torch" }
+  }
+}
+```
+
+plus one more `data` field: `birth_frames` — a float list, one first-seeded
+frame per track id (column `i` of `tracks` = track id `i`).
+
+`tracks (F, N_max, 2)`, `visibles (F, N_max)`, `observation_matrix (2F, N_max)`
+— padded exactly as above. Callers that want a per-frame dense tensor can just
+mask with `visibles` / `birth_frames` ≤ frame.
+
+Cost note: unlike a "merge and re-init" scheme, generations do **not** lose
+their long-range TAPNext memory — surviving points keep their full LRU
+history — at the cost of one model forward per *live* generation per frame.
+On long sequences, set `retire_after_invisible` (and keep `max_total_points`
+bounded); the box's per-request logging counts re-seeds and retirements.
 
 ## Docker Build Arguments
 
@@ -297,6 +372,8 @@ docker run --gpus all \
 - Grid detection generates (grid_size × grid_size) query points per frame
 - Track state persists across sequential frames for a session until that session
   is reset or reaped
+- Growing sessions: per-frame cost = one forward per live generation; bound it
+  with `max_total_points` / `retire_after_invisible` (see above)
 - With multiple sessions the shared model is loaded once; each session adds a
   per-session state cost that grows with the video length. Idle sessions are
   reaped after `TAPNEXT_SESSION_TTL` (default 1800 s); raise it or set 0 if
@@ -313,6 +390,12 @@ Two test entry points:
 # isolation/regression.
 cd images/tapnext_tracker/test
 python test_tapnext_sessions.py
+
+# In-process growing-point-set suite (new_tracks path) — same stub-model
+# approach: growth, stable ids, retirement, backfill, budgets, reset/parking,
+# isolation, and legacy back-compat, with exact forward-call counts
+cd images/tapnext_tracker/test
+python test_tapnext_growing.py
 
 # Live smoke test against a running box (needs the real image + a GPU):
 docker build --tag my_tapnext -f docker/Dockerfile .
