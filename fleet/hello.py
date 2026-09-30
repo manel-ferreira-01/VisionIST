@@ -32,6 +32,10 @@ from visionist_client import Visionist, trace  # noqa: E402
 DOG, CAR = _REPO / "images/clip/test/dog.jpg", _REPO / "images/clip/test/car.jpg"
 VGGT_FRAMES = (_REPO / "images/vggt/test/images/00.jpg",
                _REPO / "images/vggt/test/images/01.jpg")
+LIGHTGLUE_PAIR = (_REPO / "images/lightglue_box/test/00.jpg",
+                  _REPO / "images/lightglue_box/test/01.jpg")
+FLOW_PAIR = (_REPO / "images/unimatch/test/flow_0.jpg",
+             _REPO / "images/unimatch/test/flow_1.jpg")
 
 # -- THE ENTIRE end-user surface: a list of (name, address, data, config) ----
 FLEET = [
@@ -76,6 +80,16 @@ FLEET = [
         "yolo",       "localhost:9068",
         {"images": [DOG, CAR]},
         {"yolo":    {"command": "detect", "parameters": {"save_annotated": False}}},
+    ),
+    (
+        "lightglue",  "localhost:9069",
+        {"images": list(LIGHTGLUE_PAIR)},
+        {"lightglue": {"command": "match", "parameters": {}}},
+    ),
+    (
+        "unimatch",   "localhost:9070",
+        {"images": list(FLOW_PAIR)},
+        {"unimatch": {"command": "flow",  "parameters": {}}},
     ),
 ]
 
