@@ -57,6 +57,8 @@ jobs:
           - { dir: yolo,         image: yolo }
           - { dir: vggt,          image: vggt }
           - { dir: moge_box,      image: moge_box }
+          - { dir: lightglue_box, image: lightglue_box }
+          - { dir: unimatch,      image: unimatch }
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -133,7 +135,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           echo "Pin fleet/docker-compose.yml to these digests for a fully reproducible fleet:"
-          for image in clip tapnext_tracker lang_segm textembedding opencv_box yolo vggt moge_box; do
+          for image in clip tapnext_tracker lang_segm textembedding opencv_box yolo vggt moge_box lightglue_box unimatch; do
             d=$(docker buildx imagetools inspect "ghcr.io/${OWNER}/${image}:${VER}" 2>/dev/null \
                 | awk '/^Digest:/{print $2}')
             echo "  $image -> ghcr.io/${OWNER}/${image}@${d:-<push failed — check that job>}"

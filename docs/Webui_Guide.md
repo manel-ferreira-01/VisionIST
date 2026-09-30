@@ -10,7 +10,7 @@
 ```
    browser / curl ──HTTP──▶ webui (FastAPI, box-agnostic core)
                                   │  visionist_client.Visionist.run(...)
-   box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · yolo
+   box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · moge · yolo · unimatch
 ```
 
 **Design rule (inherited from `visionist_client`):** the core is *smart about
@@ -20,9 +20,9 @@ box = one YAML file, never code. The per-box README under `images/` stays the
 authoritative request-shape source; defs link to them via `docs:`.
 
 **Scope is contract-only:** every box is served through the one shared
-`Process` RPC. `opencv_box` is deliberately excluded (pre-contract second
-RPC); re-adding it later = new YAML def only (`build_call` refuses
-non-`Process` methods with a clear error until then).
+`Process` RPC (`build_call` refuses non-`Process` methods with a clear
+error). `opencv_box` and `lightglue_box` are contract-compliant but have no
+def yet; adding either = one new YAML file, no code.
 
 ## 2. Current state (verified)
 
@@ -37,8 +37,8 @@ Still **unverified in-browser / live**: vggt GLB orbit + tensor cards
 a real reconstruction), pixel-level pass of `overlay`, history click-through,
 and a first human pass of yolo's `video` player (API + def + serialization
 verified end-to-end incl. a real 1920×1080 annotated mp4).
-opencv_box intentionally out of scope (pre-contract second RPC); the new
-standard `yolo` box covers object detection via `boxes/yolo.yaml`.
+`opencv_box` and `lightglue_box` have no def yet (see §1); object detection
+is covered by the standard `yolo` box via `boxes/yolo.yaml`.
 
 ## 3. Run / build / test loop
 
@@ -59,14 +59,16 @@ WEBUI_DATA_DIR=$PWD/data WEBUI_PORT=8090 \
 ```
 
 Fleet seed (local docker fleet): `clip 9061 · sbert 9062 · tapnext 9063 ·
-lang_sam 9064 · vggt 9066 · moge 9067` (see `webui/data/fleet.json`).
+lang_sam 9064 · vggt 9066 · moge 9067 · yolo 9068 · unimatch 9070`
+(see `webui/data/fleet.json`).
 
 ## 4. Layout
 
 ```
 webui/
 ├── boxes/                    # ← the ONLY per-box knowledge in the whole webui
-│   ├── clip.yaml  lang_sam.yaml  sbert.yaml  tapnext.yaml  vggt.yaml
+│   ├── clip.yaml  lang_sam.yaml  moge.yaml  sbert.yaml
+│   ├── tapnext.yaml  unimatch.yaml  vggt.yaml  yolo.yaml
 ├── src/webui/
 │   ├── app.py                # FastAPI factory (env-driven; mounts web/dist)
 │   ├── config.py             # WEBUI_* env, defaults

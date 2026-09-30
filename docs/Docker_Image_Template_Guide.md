@@ -53,7 +53,7 @@ service PipelineService {
 ### src/my_service.py
 
 ```python
-import sys
+import json, logging, sys
 sys.path.append('./protos')
 import pipeline_pb2 as pb2
 import pipeline_pb2_grpc as pb2_grpc
@@ -81,12 +81,15 @@ class MyService(pb2_grpc.PipelineServiceServicer):
             results = self.run_inference(images, parameters)
             
             return pb2.Envelope(
-                config_json=json.dumps({"status": "success"}),
+                # status lives under the box key; if `results` is a binary
+                # blob, also declare its "encoding" here (see CODECS.md)
+                config_json=json.dumps({"my_service": {"status": "done"}}),
                 data={"results": wrap_value(results)}
             )
         except Exception as e:
-            logging.error(f"Processing failed: {e}")
-            return pb2.Envelope()
+            logging.exception("Processing failed")
+            return pb2.Envelope(config_json=json.dumps(
+                {"my_service": {"status": "error", "error": str(e)}}))
 
 # Add server setup (see full template below)
 ```
@@ -190,6 +193,7 @@ class MyService(pb2_grpc.PipelineServiceServicer):
         self._model = load_model_to_cpu()
         self._device = "cpu"
         self._last_request_time = time.time()
+        self._lock = threading.Lock()   # guards _model/_device (not re-entrant)
         
         # Watchdog to move back to CPU when idle
         threading.Thread(target=self._watchdog_loop, daemon=True).start()
@@ -271,11 +275,11 @@ CMD ["python", "/workspace/service.py"]
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import json
+import json, os
 
 class PipelineService(pb2_grpc.PipelineServiceServicer):
     def __init__(self):
-        self.model = YOLO("yolo11n.pt")
+        self.model = YOLO(os.getenv("YOLO_WEIGHTS", "yolov8n.pt"))  # same default as images/yolo
 
     # the shared contract: ONE `Process` RPC, dispatched on `command`
     def Process(self, request, context):
@@ -509,7 +513,7 @@ Before deploying:
 ## Publishing to GitHub Container Registry (GHCR)
 
 The fleet's images are published from this repo by the
-`publish boxes` workflow (`.github/workflows/publish-boxes.yml`), not by hand.
+`publish boxes` workflow (`.github/workflows/publish-visionist.yml`), not by hand.
 Local `docker build` is for development; the registry is the source of truth
 for `docker pull`.
 
@@ -527,9 +531,10 @@ You can also trigger the workflow from Actions with an arbitrary version string
 
 ### Reproducible builds
 
-Every Dockerfile's `FROM` base is **pinned by digest**
+Dockerfile `FROM` bases are **pinned by digest**
 (`…@sha256:…`), so a published tag produces the same image no matter when or
-where it is rebuilt. When you bump a base image, update the digest in the
+where it is rebuilt. Exceptions still to pin: `moge_box` (both stages) and the
+`weights`/`vendor` stages of `vggt`. When you bump a base image, update the digest in the
 Dockerfile **and** commit that change so the published tag and the source
 agree.
 
@@ -547,7 +552,8 @@ lines you can drop into `fleet/docker-compose.yml`.
 ### What is (and isn't) published
 
 - Published: `clip`, `tapnext_tracker`, `lang_segm`, `textembedding`,
-  `opencv_box`, `yolo`, `vggt`, `moge_box` (the 8 in the workflow matrix).
+  `opencv_box`, `yolo`, `vggt`, `moge_box`, `lightglue_box`, `unimatch`
+  (the 10 in the workflow matrix).
 - `vggt` is the heaviest build: its Dockerfile clones
   `facebookresearch/vggt` and downloads the ~5 GB `VGGT-1B` checkpoint at
   build time (both were previously missing from the repo; the build is now
@@ -560,6 +566,8 @@ lines you can drop into `fleet/docker-compose.yml`.
 - Builds run on public runners (2 concurrent). A full publish is ~15-30 min and
   consumes part of the free monthly runner-minute quota — run it per release,
   not per commit.
-- No shared build cache is used (the GHA cache quota is far too small for the
-  8 GB CUDA base layers); that is why a publish rebuilds from scratch.
+- The GHA cache is not used (its quota is far too small for the 8 GB CUDA
+  base layers). Instead each box has a registry cache,
+  `ghcr.io/<owner>/cache-<box>:latest`: the first publish pushes it
+  (~5-13 GB per box), after which unchanged boxes rebuild in ~1-2 min.
 

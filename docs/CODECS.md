@@ -201,23 +201,19 @@ Reuse the existing fake-servicer harness in `fake_box_smoke.py`; no GPU needed.
 
 ## 9. Acceptance criteria (definition of done)
 
-- [ ] `visionist_client` builds/imports; `codec.py` has the 5 named codecs + `decode_with`.
-- [ ] `Result.from_envelope` reads `encoding` (string or per-field dict), exposes `res.encoding`.
-- [ ] Fake-box test #1 (above) passes: lang_segm-style `results` returns a **decoded list**, `res.fields['results']` type is `list` (not `bytes`/`ndarray`).
-- [ ] Test with unknown codec → raw bytes, no exception.
-- [ ] Existing `fake_box_smoke.py` cases still pass (back-compat).
-- [ ] `zstandard` in `pyproject.toml`.
-- [ ] lang_segm (and ideally tapnext/clip/sbert) boxes emit `encoding` in their response config.
-- [ ] Docs + `conventions` table updated.
-- [ ] Re-run `fleet/hello.py`: the `lang_segm` row shows `results=list[...]` (decoded),
+- [x] `visionist_client` builds/imports; `codec.py` has the 5 named codecs + `decode_with`.
+- [x] `Result.from_envelope` reads `encoding` (string or per-field dict), exposes `res.encoding`.
+- [x] Fake-box test #1 (above) passes: lang_segm-style `results` returns a **decoded list**, `res.fields['results']` type is `list` (not `bytes`/`ndarray`).
+- [x] Test with unknown codec → raw bytes, no exception.
+- [x] Existing `fake_box_smoke.py` cases still pass (back-compat).
+- [x] `zstandard` in `pyproject.toml`.
+- [x] lang_segm (and ideally tapnext/clip/sbert) boxes emit `encoding` in their response config.
+- [x] Docs + `conventions` table updated.
+- [x] Re-run `fleet/hello.py`: the `lang_segm` row shows `results=list[...]` (decoded),
       not `results=bytes[2969]`.
-- [ ] A new commit: `feat(visionist_client): codec registry + declared payload encoding`.
+- [x] A new commit: `feat(visionist_client): codec registry + declared payload encoding`
+      (landed as `aa063ac`, under the package's former name `boxes_client`).
 
-### Suggested order for the next session
-1. `codec.py` + `decode_with` (pure, no I/O) + unit test for each codec.
-2. `result.py` threading `encoding` through + res.encoding.
-3. Fake-box codec tests → all green.
-4. Add `"encoding"` to lang_segm (+ tapnext/clip/sbert) box sources.
-5. `zstandard` dep; docs.
-6. Rebuild the lang_segm image; `python fleet/hello.py` → confirm decoded `results`.
-7. Commit.
+All verified 2026-09-30: `tests/codec_smoke.py` and `tests/fake_box_smoke.py`
+pass, every `images/*/src/*_service.py` declares `"encoding"`, and a live
+`fleet/hello.py` run shows `lang_segm  results=list[1]`.

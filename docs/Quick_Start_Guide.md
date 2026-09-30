@@ -79,7 +79,7 @@ import concurrent.futures as futures
 import grpc, json, logging, os, sys, threading, time
 import torch
 sys.path.append("./protos")
-import pipeline_pb2, pipeline_pb2_grpc
+import pipeline_pb2 as pb2, pipeline_pb2_grpc as pb2_grpc
 from aux import wrap_value, unwrap_value
 
 _IDLE_TIMEOUT = 60  # seconds
@@ -101,21 +101,23 @@ class Box(pb2_grpc.PipelineServiceServicer):
                     self._move_unlocked("cpu")
 
     def _move_unlocked(self, target):
-        with self._lock:
-            ...  # self._model.to(target); self._device = target; torch.cuda.empty_cache()
+        # caller already holds self._lock (threading.Lock is not re-entrant)
+        self._model.to(torch.device(target)); self._device = target
+        if target == "cpu":
+            torch.cuda.empty_cache()
 
     def Process(self, request, context):
         try:
             cfg = json.loads(request.config_json)
             box_cfg = cfg.get("my_box", {})                       # ← your box key
             if box_cfg.get("command") == "reset":                 # always accept
-                return pipeline_pb2.Envelope(config_json=json.dumps(
+                return pb2.Envelope(config_json=json.dumps(
                     {"my_box": {"status": "done", "action": "reset"}}))
 
             parameters = box_cfg.get("parameters", {}) or {}
             images = unwrap_value(request.data["images"]) if "images" in request.data else None
             if not images:
-                return pipeline_pb2.Envelope(config_json=json.dumps(
+                return pb2.Envelope(config_json=json.dumps(
                     {"my_box": {"status": "empty_request"}}))
 
             with self._lock:                                      # auto-GPU, matches clip/sbert/lang_segm
@@ -124,17 +126,18 @@ class Box(pb2_grpc.PipelineServiceServicer):
                 if not target and torch.cuda.is_available():
                     target = "cuda"
                 if target and target != self._device:
-                    self._model.to(torch.device(target)); self._device = target
+                    self._move_unlocked(target)
 
             out_list = self._model.predict(images)                # your real workload
             import zstandard as zstd, pickle
             blob = zstd.ZstdCompressor().compress(pickle.dumps(out_list))
-            return pipeline_pb2.Envelope(
-                config_json=json.dumps({"my_box": {"status": "done", "num_images": len(images)}}),
+            return pb2.Envelope(
+                config_json=json.dumps({"my_box": {"status": "done", "num_images": len(images),
+                                                   "encoding": "zstd_pickle"}}),   # declare, don't make the client guess
                 data={"results": wrap_value(blob)})
         except Exception as e:
             logging.exception("inference failed")
-            return pipeline_pb2.Envelope(config_json=json.dumps(
+            return pb2.Envelope(config_json=json.dumps(
                 {"my_box": {"status": "error", "error": str(e)}}))
 
 if __name__ == "__main__":
@@ -197,7 +200,8 @@ python test/test_<name>.py
 
 # client check
 python - <<'PY'
-from visionist_client import Visionist, pathlib
+import pathlib
+from visionist_client import Visionist
 b = Visionist("localhost:8061")
 print(b.info())
 print(b.run(data={"images": [pathlib.Path("x.jpg")]},
