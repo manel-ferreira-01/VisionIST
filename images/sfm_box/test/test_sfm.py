@@ -73,6 +73,20 @@ def check_cameras(sec, out, gt, label):
     return ev
 
 
+def check_depth_model(sec, out, lam):
+    """Z = depth_scales * lambda + depth_offsets must be the depth the box
+    factorized (the z rows of completed_matrix) on every observed entry."""
+    assert sec["depth_model"] == "Z = depth_scales * lambda + depth_offsets", sec
+    lam_k = np.asarray(lam)[out["frame_ids"]][:, out["point_ids"]]
+    Z = out["depth_scales"][:, None] * lam_k + out["depth_offsets"][:, None]
+    obs = out["observed"]
+    err = np.abs(Z - out["completed_matrix"][2::3])[obs].max()
+    print(f"    depth model: max |d*lambda + o - Z_factorized| = {err:.2e}, "
+          f"min scale {out['depth_scales'].min():.3f}, offset f0 {out['depth_offsets'][0]:.1e}")
+    assert err < 1e-4 * np.abs(Z[obs]).max(), err
+    assert abs(out["depth_scales"].min() - 1.0) < 1e-3 and abs(out["depth_offsets"][0]) < 1e-6
+
+
 def main():
     target = os.getenv("BOX_HOST", "localhost:8061")
     print(f"Target: {target}")
@@ -89,12 +103,14 @@ def main():
     # --- 1. mode B, complete -------------------------------------------------
     sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam.numpy()}, reconstruct)
     check_cameras(sec, out, gt, "W_mat complete")
+    check_depth_model(sec, out, lam)
     assert sec["missing_in"] == 0.0
 
     # --- 2. mode B, ~35% missing (NaN) ---------------------------------------
     lam_m = banded_missing(lam)
     sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam_m.numpy()}, reconstruct)
     check_cameras(sec, out, gt, "W_mat missing")
+    check_depth_model(sec, out, lam_m)
     assert sec["missing_in"] > 0.3, sec
     assert not out["observed"].all(), "missing entries should stay unobserved"
 

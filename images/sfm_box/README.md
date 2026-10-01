@@ -133,13 +133,15 @@ outlier tracks; `frame_ids` / `point_ids` map what survived back to the input.
          "num_frames": 8, "num_points": 436, "missing": 0.30,
          "iterations": 100,
          "removed": [{"iter": 10, "points": 310, "frames": 0}, ...],
+         "depth_model": "Z = depth_scales * lambda + depth_offsets",
          "encoding": {"cameras": "numpy", ...}}}
 ```
 
 `status` is `done | empty_request | error` (`error` carries the message).
 `missing_in` / `missing` are the unobserved fractions of the input and of the
 surviving (frames × points) block; `removed` lists the RANSAC / visibility
-removals per completion iteration.
+removals per completion iteration; `depth_model` states how the per-frame
+depth correction is applied.
 
 `data` (all `np.save` blobs, declared `numpy`); `F'` / `P'` = surviving
 frames / points:
@@ -151,9 +153,22 @@ frames / points:
 | `frame_ids` | `(F',)` int64 | input frame of each camera |
 | `point_ids` | `(P',)` int64 | input column of each point |
 | `observed` | `(F', P')` bool | which entries were observed (the rest were completed) |
-| `completed_matrix` | `(3F', P')` | the completed, scale-corrected `(λ + o)·W` that is factorized |
-| `depth_offsets` | `(F',)` | recovered per-frame depth offsets (`o₀ = 0`) |
-| `depth_scales` | `(F',)` | recovered per-frame depth scales (max-normalized) |
+| `completed_matrix` | `(3F', P')` | the completed, depth-corrected `Z·W` that is factorized (`Z` as below) |
+| `depth_scales` | `(F',)` | per-frame slope `d` of the depth correction |
+| `depth_offsets` | `(F',)` | per-frame offset `o` of the depth correction (`o₀ = 0`) |
+
+**Depth correction.** The corrected depth of frame `f` is
+
+```
+Z = depth_scales[f] * lambda + depth_offsets[f]        # multiply, then add
+```
+
+where `lambda` is the raw monocular depth (e.g. a MoGe map); back-project
+with `X_cam = Z · K⁻¹ [u, v, 1]` and `X = Rᵀ (X_cam − t)` to land in the
+`points` / `cameras` frame. Gauges: frame 0's offset is anchored to 0, and
+the scales are normalized so the **smallest is ≈ 1** (the global scale is
+free — `d ≥ 1` does not mean the depth is underestimated). Internally the
+pipeline estimates `(lambda + o) / s`; the box reports `d = 1/s`, `o' = o/s`.
 
 The reconstruction is defined **up to a similarity** (global scale, rotation,
 translation, plus one depth offset) — the natural gauge of the problem.

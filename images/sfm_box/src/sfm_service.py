@@ -167,6 +167,12 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
             def out(t):
                 return wrap_value(np_to_bytes(t.detach().cpu().numpy()))
 
+            # The pipeline factorizes depths (lambda + o) / s. Report them in
+            # the multiply-then-add form Z = d * lambda + o' (d = 1/s,
+            # o' = o/s): the same depths, in the documented affine model.
+            depth_scales = 1.0 / rec["current_scales"]
+            depth_offsets = rec["offsets"] / rec["current_scales"]
+
             response_data = {
                 "cameras": out(cameras),
                 "points": out(rec["aligned_shape"].t().contiguous()),   # (P, 3)
@@ -174,8 +180,8 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
                 "point_ids": wrap_value(np_to_bytes(point_ids)),
                 "observed": out(mask),
                 "completed_matrix": out(rec["compl_W_lam"]),
-                "depth_offsets": out(rec["offsets"]),
-                "depth_scales": out(rec["current_scales"]),
+                "depth_scales": out(depth_scales),
+                "depth_offsets": out(depth_offsets),
             }
 
             info = rec["info"]
@@ -193,6 +199,7 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
                         "missing": float(1.0 - mask.float().mean()),
                         "iterations": info["iterations"],
                         "removed": info["removed"],
+                        "depth_model": "Z = depth_scales * lambda + depth_offsets",
                         # Declared payload encoding (generic visionist_client
                         # contract): every field is an np.save blob.
                         "encoding": {k: "numpy" for k in response_data},
