@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Test script for the SfM gRPC service (shared envelope interface).
+
+Connects to a running sfm box and, on the synthetic scene from
+``test_projective_reconstruction.py`` (orbiting cameras, per-frame
+affine-corrupted depth):
+
+  1. mode B, complete   — ``W_mat`` + ``lambda_mat``; cameras vs ground truth
+  2. mode B, missing    — same, with ~35% of the entries NaN (banded, like
+                          real tracks); still recovered
+  3. mode A             — pixel ``tracks`` + painted ``depths`` maps +
+                          ``intrinsics``, with NaN / out-of-image track
+                          entries -> treated as missing entries
+  4. ``reset`` (no-op) and a malformed request (in-band ``status: error``)
+
+Run (server already up):
+    python images/sfm_box/test/test_sfm.py
+    BOX_HOST=localhost:9071 python images/sfm_box/test/test_sfm.py
+"""
+
+import io
+import json
+import os
+import sys
+
+_TEST_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(_TEST_DIR, "..", "protos"))
+sys.path.insert(0, os.path.join(_TEST_DIR, "..", "src"))
+
+import grpc  # noqa: E402
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+import pipeline_pb2  # noqa: E402
+import pipeline_pb2_grpc  # noqa: E402
+import aux  # noqa: E402
+
+from projective_reconstruction import compare_cameras  # noqa: E402
+from test_projective_reconstruction import banded_missing, make_synthetic  # noqa: E402
+
+
+def npy(arr) -> bytes:
+    buf = io.BytesIO()
+    np.save(buf, np.asarray(arr))
+    return buf.getvalue()
+
+
+def call(stub, data, config):
+    request = pipeline_pb2.Envelope(
+        config_json=json.dumps(config),
+        data={k: aux.wrap_value(npy(v)) for k, v in data.items()},
+    )
+    resp = stub.Process(request)
+    sec = json.loads(resp.config_json).get("sfm", {})
+    out = {k: np.load(io.BytesIO(aux.unwrap_value(v))) for k, v in resp.data.items()}
+    return sec, out
+
+
+def check_cameras(sec, out, gt, label):
+    print(f"[{label}] status={sec.get('status')} frames={sec.get('num_frames')}/{sec.get('num_frames_in')} "
+          f"points={sec.get('num_points')}/{sec.get('num_points_in')} "
+          f"missing in={sec.get('missing_in', 0):.1%} kept={sec.get('missing', 0):.1%} "
+          f"iters={sec.get('iterations')} runtime={sec.get('runtime', 0):.3f}s")
+    assert sec.get("status") == "done", sec
+    for k, v in out.items():
+        print(f"    {k:17s} {v.dtype} {v.shape}")
+    cams = [torch.from_numpy(c).float() for c in out["cameras"]]
+    ev = compare_cameras(cams, [gt[i] for i in out["frame_ids"]])
+    print(f"    mean rot err {ev['mean_rot']:.3f} deg | mean dir err {ev['mean_dir']:.3f} deg")
+    assert ev["mean_rot"] < 1.5 and ev["mean_dir"] < 1.0, ev
+    F, P = len(out["frame_ids"]), len(out["point_ids"])
+    assert out["cameras"].shape == (F, 3, 4) and out["points"].shape == (P, 3)
+    assert out["observed"].shape == (F, P) and out["completed_matrix"].shape == (3 * F, P)
+    return ev
+
+
+def main():
+    target = os.getenv("BOX_HOST", "localhost:8061")
+    print(f"Target: {target}")
+    channel = grpc.insecure_channel(target, options=[
+        ("grpc.max_send_message_length", -1),
+        ("grpc.max_receive_message_length", -1),
+    ])
+    stub = pipeline_pb2_grpc.PipelineServiceStub(channel)
+    reconstruct = {"sfm": {"command": "reconstruct"}}
+
+    W, lam, gt, *_ = make_synthetic(F=10, P=300)
+    F, P = lam.shape
+
+    # --- 1. mode B, complete -------------------------------------------------
+    sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam.numpy()}, reconstruct)
+    check_cameras(sec, out, gt, "W_mat complete")
+    assert sec["missing_in"] == 0.0
+
+    # --- 2. mode B, ~35% missing (NaN) ---------------------------------------
+    lam_m = banded_missing(lam)
+    sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam_m.numpy()}, reconstruct)
+    check_cameras(sec, out, gt, "W_mat missing")
+    assert sec["missing_in"] > 0.3, sec
+    assert not out["observed"].all(), "missing entries should stay unobserved"
+
+    # --- 3. mode A: pixel tracks + depth maps + intrinsics --------------------
+    # the synthetic scene is very wide-angle (|x| up to ~7), so fit the
+    # principal point / image size to it with a 20 px margin
+    x, y = W[0::3].numpy(), W[1::3].numpy()
+    fpx, margin = 100.0, 20.0
+    cx, cy = margin - fpx * x.min(), margin - fpx * y.min()
+    Wd = int(np.ceil(cx + fpx * x.max() + margin))
+    H = int(np.ceil(cy + fpx * y.max() + margin))
+    K = np.array([[fpx, 0, cx], [0, fpx, cy], [0, 0, 1]])
+    u, v = K[0, 0] * x + K[0, 2], K[1, 1] * y + K[1, 2]
+    tracks = np.empty((2 * F, P)); tracks[0::2], tracks[1::2] = u, v
+
+    depths = np.ones((F, H, Wd), dtype=np.float32)
+    hits = np.zeros((F, H, Wd), dtype=int)
+    corners = [(du, dv) for du in (0, 1) for dv in (0, 1)]
+    u0, v0 = np.floor(u).astype(int), np.floor(v).astype(int)
+    for f in range(F):
+        # paint the 4 pixels around each track, so bilinear sampling is exact
+        for du, dv in corners:
+            depths[f, v0[f] + dv, u0[f] + du] = lam[f].numpy()
+            np.add.at(hits[f], (v0[f] + dv, u0[f] + du), 1)
+    # a track sharing a painted pixel with another one samples a wrong depth in
+    # that frame: make that ENTRY missing (a fixture artifact, not data)
+    for f in range(F):
+        shared = np.zeros(P, dtype=bool)
+        for du, dv in corners:
+            shared |= hits[f, v0[f] + dv, u0[f] + du] > 1
+        tracks[2 * f, shared] = np.nan
+    # plus one NaN entry and one entry leaving the image
+    tracks[2, 0] = np.nan
+    tracks[5, 1] = H + 10
+
+    sec, out = call(stub, {"tracks": tracks, "depths": depths, "intrinsics": K}, reconstruct)
+    check_cameras(sec, out, gt, "tracks")
+    expected_missing = (~np.isfinite(tracks[0::2])).sum() + 1      # + the out-of-image one
+    assert round(sec["missing_in"] * F * P) == expected_missing, sec
+
+    # --- 4. reset + in-band error ---------------------------------------------
+    sec, _ = call(stub, {}, {"sfm": {"command": "reset"}})
+    print(f"[reset] {sec}")
+    assert sec == {"status": "done", "action": "reset"}
+
+    sec, _ = call(stub, {"W_mat": np.zeros((5, 10)), "lambda_mat": np.zeros((1, 10))},
+                  reconstruct)
+    print(f"[bad shape] {sec}")
+    assert sec["status"] == "error"
+
+    print("PASS")
+
+
+if __name__ == "__main__":
+    main()

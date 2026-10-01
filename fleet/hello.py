@@ -36,6 +36,7 @@ LIGHTGLUE_PAIR = (_REPO / "images/lightglue_box/test/00.jpg",
                   _REPO / "images/lightglue_box/test/01.jpg")
 FLOW_PAIR = (_REPO / "images/unimatch/test/flow_0.jpg",
              _REPO / "images/unimatch/test/flow_1.jpg")
+SFM_DIR = _REPO / "images/sfm_box/test/data"   # synthetic 6-frame scene (.npy)
 
 # -- THE ENTIRE end-user surface: a list of (name, address, data, config) ----
 FLEET = [
@@ -90,6 +91,11 @@ FLEET = [
         "unimatch",   "localhost:9070",
         {"images": list(FLOW_PAIR)},
         {"unimatch": {"command": "flow",  "parameters": {}}},
+    ),
+    (
+        "sfm",        "localhost:9071",
+        {"W_mat": SFM_DIR / "W_mat.npy", "lambda_mat": SFM_DIR / "lambda_mat.npy"},
+        {"sfm":     {"command": "reconstruct", "parameters": {}}},
     ),
 ]
 

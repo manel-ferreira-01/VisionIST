@@ -35,6 +35,7 @@ shared gRPC envelope, called by `visionist_client` or by orchestration-layer box
 | opencv_box | GPU / CPU | Feature extraction & matching (SIFT / ORB / LightGlue) |
 | moge_box | GPU | **MoGe-3: Monocular 3D geometry (depth/points/normals)** |
 | unimatch | GPU / CPU | Dense estimation — optical flow / stereo disparity / metric depth (UniMatch) |
+| sfm_box | CPU | Depth-augmented projective SfM — partial tracks + monocular depth → cameras + 3D points (matrix completion) |
 
 **The per-box README is the authoritative source for that box's request shape**
 (config keys, fields, status, how to decode `results`):

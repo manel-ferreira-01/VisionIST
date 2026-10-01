@@ -56,7 +56,7 @@ python supervisor_demo.py           # guided demo with decoded output per box
 
 **Access**
 - webui (local): **http://localhost:8080** (SPA at `/`, API at `/api/*`)
-- boxes (direct): host ports **9061–9069**, or by service name on the
+- boxes (direct): host ports **9061–9071**, or by service name on the
   `visionist-fleet` network — see the per-box READMEs
 
 **Stop it all:** `cd fleet && docker compose down`
@@ -85,6 +85,7 @@ docker run --rm --gpus all -p 8061:8061 -e PORT=8061 --ipc=host my_lang_segm
 | opencv_box | GPU / CPU | Feature extraction & matching (SIFT / ORB / LightGlue) |
 | moge_box | GPU | MoGe-3 monocular 3D geometry (depth / points / normals) — CUDA-only |
 | unimatch | GPU / CPU | Dense estimation with UniMatch — optical flow / stereo disparity / metric depth (flow model baked in; stereo/depth checkpoints on demand) |
+| sfm_box | CPU | Depth-augmented projective SfM — feature tracks (partial tracks ok: missing entries are completed) + monocular depth → camera poses + 3D points |
 
 **The per-box README is the authoritative source for that box's request shape**
 (config keys, fields, status, how to decode `results`):

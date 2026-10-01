@@ -101,6 +101,16 @@ services:
     environment: [ PORT=8061 ]
     restart: unless-stopped
 
+  # SfM — depth-augmented structure-from-motion (tracks + monocular depth ->
+  # cameras + points). CPU-only: no GPU reservation.
+  sfm:
+    build: { context: ../images/sfm_box,       dockerfile: docker/Dockerfile }
+    image: visionist-local/sfm
+    container_name: visionist-sfm
+    ports: ["9071:8061"]
+    environment: [ PORT=8061 ]
+    restart: unless-stopped
+
   webui:
     build: { context: ..,   dockerfile: webui/Dockerfile }
     image: visionist-local/webui
@@ -121,4 +131,5 @@ services:
       - moge
       - yolo
       - unimatch
+      - sfm
     restart: unless-stopped

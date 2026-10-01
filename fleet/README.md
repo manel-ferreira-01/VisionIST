@@ -7,7 +7,7 @@ the concrete proof that the core is box-agnostic.
 
 | file              | purpose |
 |-------------------|---------|
-| `docker-compose.yml` | launches 10 real boxes (clip, textEmbedding, tapnext, lang_segm, opencv, vggt, moge, yolo, lightglue, unimatch) on host ports 9061–9070, all on the shared `PipelineService` interface |
+| `docker-compose.yml` | launches 11 real boxes (clip, textEmbedding, tapnext, lang_segm, opencv, vggt, moge, yolo, lightglue, unimatch, sfm) on host ports 9061–9071, all on the shared `PipelineService` interface |
 | `hello.py`        | the *minimal* end-user interface: one list of `(name, address, data, config)` specs, one `Visionist.run(...)` per box |
 
 ## Use
@@ -46,3 +46,4 @@ docker compose down           # stop
 | yolo        | 9068      | `yolo`         | YOLO detection **+ tracking** on images and/or a decoded video (ultralytics; per-session track ids — `session_id`/`reset`/`list` like tapnext) |
 | lightglue   | 9069      | `lightglue`    | SuperPoint/DISK features + LightGlue matching (1 image: features; 2: + `matches`/`confidence`) — `match` / `stream` (sliding window, `session_id`) / `reset` / `list` on `Process` |
 | unimatch    | 9070      | `unimatch`     | dense estimation — optical flow / stereo disparity / metric depth; flow model in the image, stereo/depth via `parameters.model` |
+| sfm         | 9071      | `sfm`          | depth-augmented projective SfM — partial tracks (NaN = missing, completed) + monocular depth (or prebuilt `W_mat`/`lambda_mat`) → cameras `(F,3,4)` + points; CPU-only |
