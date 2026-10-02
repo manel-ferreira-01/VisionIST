@@ -10,8 +10,14 @@
 ```
    browser / curl ──HTTP──▶ webui (FastAPI, box-agnostic core)
                                   │  visionist_client.Visionist.run(...)
-   box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · moge · yolo · unimatch
+   box by IP:port (Process Envelope) ── clip · tapnext · lang_sam · sbert · vggt · moge · yolo · unimatch · lightglue · sfm
 ```
+
+Tasks that need **several boxes** (SfM from a video: lightglue → MoGe → sfm)
+are **pipelines**: a Python module in `webui/pipelines/` (a `DEF` with the
+same form/visualizer vocabulary + a `run(ctx, data, params)` glue function)
+that the backend runs as a job; the SPA's pipeline page polls it and renders
+each result as it is emitted. See §5b.
 
 **Design rule (inherited from `visionist_client`):** the core is *smart about
 shape, dumb about content*. Nothing in `webui/src/webui/` or `webui/web/src/`
@@ -21,14 +27,15 @@ authoritative request-shape source; defs link to them via `docs:`.
 
 **Scope is contract-only:** every box is served through the one shared
 `Process` RPC (`build_call` refuses non-`Process` methods with a clear
-error). `opencv_box` and `lightglue_box` are contract-compliant but have no
-def yet; adding either = one new YAML file, no code.
+error). `opencv_box` is contract-compliant but has no def yet; adding it =
+one new YAML file, no code.
 
 ## 2. Current state (verified)
 
 | Layer | State |
 |---|---|
-| Backend | **52/52 tests green** (`python3 -m pytest tests/ -q` from `webui/`), live-verified against the running fleet (clip, lang_sam, tapnext; error paths 400/502) + an API-level vggt round trip (`fake_vggt`: namespaced call, torch tensors with full shape, GLB served as `model/gltf-binary`) + a live MoGe round trip through the `points` visualizer (701k reprojected points, photo-colored, no page errors — `webui/web/.moge_points_e2e.cjs`). The standard `yolo` box is covered by `boxes/yolo.yaml` + `test_yolo_detection_def` (registry) — a defs-only addition, no code. |
+| Pipelines | `sfm_video` (lightglue + MoGe + sfm): 7 API-level tests against fake boxes (`tests/test_pipelines.py`) + **live** on `cozinha.mp4` — 20 frames in ~19 s, 1691 tracks, `linear` 3.0 px median reprojection, per-frame dense clouds overlap; browser e2e of the page (`web/.sfm_pipeline_e2e.cjs`: steps, scene canvas, no page errors). New defs `lightglue.yaml` + `sfm.yaml` (consoles verified live: lightglue `match`, sfm mode B → `scene` with frustums). |
+| Backend | **66/66 tests green** (`python3 -m pytest tests/ -q` from `webui/`), live-verified against the running fleet (clip, lang_sam, tapnext; error paths 400/502) + an API-level vggt round trip (`fake_vggt`: namespaced call, torch tensors with full shape, GLB served as `model/gltf-binary`) + a live MoGe round trip through the `points` visualizer (701k reprojected points, photo-colored, no page errors — `webui/web/.moge_points_e2e.cjs`). The standard `yolo` box is covered by `boxes/yolo.yaml` + `test_yolo_detection_def` (registry) — a defs-only addition, no code. |
 | Frontend | `tsc --noEmit && vite build` clean; `web/dist` auto-mounted by the FastAPI app (API + `/docs` keep priority) |
 | Session fixes applied | ✅ tab-switch state leakage (console now remounts per def), ✅ video input for tapnext (`video_frames` widget), ✅ tapnext tracks `(y,x)` order corrected + per-frame visibility toggle, ✅ labeled/legend heatmaps (clip), ✅ input mosaic, ✅ webui image now ships CPU `torch` — without it the `torch` codec silently degrades and tapnext/vggt tensors arrive as opaque `application/zip` files (dead tracks viewer, tensor panel without dtype/size/`.npy` button); ✅ inline array refs carry `size` (bytes) like buffer refs |
 
@@ -37,7 +44,7 @@ Still **unverified in-browser / live**: vggt GLB orbit + tensor cards
 a real reconstruction), pixel-level pass of `overlay`, history click-through,
 and a first human pass of yolo's `video` player (API + def + serialization
 verified end-to-end incl. a real 1920×1080 annotated mp4).
-`opencv_box` and `lightglue_box` have no def yet (see §1); object detection
+`opencv_box` has no def yet (see §1); object detection
 is covered by the standard `yolo` box via `boxes/yolo.yaml`.
 
 ## 3. Run / build / test loop
@@ -48,7 +55,7 @@ is covered by the standard `yolo` box via `boxes/yolo.yaml`.
 pip install -e visionist_client && pip install -e webui
 
 # backend tests
-cd webui && python3 -m pytest tests/ -q            # 52 passed in ~4 s
+cd webui && python3 -m pytest tests/ -q            # 66 passed in ~8 s
 
 # frontend: typecheck + build (dist/ is served by the app)
 cd webui/web && npx tsc --noEmit && npx vite build  # warn: three.js >500 kB chunk (cosmetic)
@@ -59,7 +66,8 @@ WEBUI_DATA_DIR=$PWD/data WEBUI_PORT=8090 \
 ```
 
 Fleet seed (local docker fleet): `clip 9061 · sbert 9062 · tapnext 9063 ·
-lang_sam 9064 · vggt 9066 · moge 9067 · yolo 9068 · unimatch 9070`
+lang_sam 9064 · vggt 9066 · moge 9067 · yolo 9068 · lightglue 9069 ·
+unimatch 9070 · sfm 9071`
 (see `webui/data/fleet.json`).
 
 ## 4. Layout
@@ -157,6 +165,43 @@ Def-driven extras (generic, no box names in code):
   the points (fallback: xyz-range colors).  Non-finite/≤ 0 depths dropped.
   Used by moge (every depth pixel back-projected, photo-colored).
 
+## 5b. Pipelines (several boxes, one task)
+
+* **Where:** `webui/pipelines/<id>.py` (`WEBUI_PIPELINES_DIR`); loaded at
+  startup, fail-fast (bad `DEF`, unknown `uses` box id → the app does not
+  start). `_*.py` = helpers, skipped.
+* **Contract:** `DEF` validates as `PipelineDef` (`id, name, uses, docs,
+  note, inputs, parameters, results` — the box-def vocabulary, no
+  command/session); `run(ctx, data, params)` gets uploads as bytes and
+  parameters with defaults filled.
+* **ctx:** `ctx.box(def_id)` → `visionist_client.Visionist` for the fleet
+  entry serving that def (each `run` counts toward the active step and is a
+  cancel point); `with ctx.step(name, total=n)` → a timed step, progress =
+  box calls / `total`; `ctx.emit(field, value)` → a result field now
+  (serialized like box fields); `ctx.info(**facts)` → header facts;
+  `ctx.check()` → explicit cancel point.
+* **Jobs:** `POST /api/pipelines/{id}/run` → 202 + job; `GET
+  /api/pipelines/jobs/{job}` snapshot; `POST …/cancel`. Thread pool
+  (`WEBUI_PIPELINE_WORKERS`), last 50 jobs kept, in memory. An exception →
+  job `error` with the failing step, message, traceback; already-emitted
+  fields stay.
+* **SPA:** `#/pipeline/<id>` (topbar after the box tabs, ⛓). The page
+  reuses the console's widgets and `ResultBlock`; it keeps unchanged field
+  objects between polls (visualizers don't refetch), resumes the last job of
+  the pipeline after a reload (sessionStorage), and collapses the input
+  mosaic.
+* **`video_frames` widget:** frame count (2–256) + optional time range
+  (from/to seconds) — SfM wants a short overlapping clip, not frames spread
+  over the whole video.
+* **`scene` visualizer** (`viz/SceneView.tsx`): sparse points (+ colors),
+  camera frustums (first red) + path, optional dense cloud (toggle, color by
+  frame), point size; OpenCV coords shown with y/z flipped; extent = 2–98 %
+  of the points grown to hold every camera.
+* **Serializer:** float arrays with NaN/Inf always go out as typed buffers
+  (JSON has no NaN — an inline one used to 500 the response).
+* **Session placement:** `session.placement: parameters` puts the session id
+  in `parameters` (lightglue) instead of next to `command` (tapnext).
+
 ## 6. Wire rules & serialization (what the SPA must handle)
 
 * files travel as `"@<token>"` refs (uploaded first) → `bytes` in the
@@ -228,3 +273,9 @@ Def-driven extras (generic, no box names in code):
    the per-frame detection JSON (no JPEG grid — the per-frame `annotated`
    JPEGs surface via the `*` fallback / artifacts list).
 5. Optional: code-split the three.js chunk (currently one ~780 kB bundle).
+6. Docker: rebuild the webui image (`cd fleet && docker compose build webui
+   && docker compose up -d webui`) to ship pipelines; then add the
+   `lightglue` (`lightglue:8061`) and `sfm` (`sfm:8061`) entries on the
+   fleet page (`webui/data-docker/fleet.json` is owned by the container).
+7. More pipelines: e.g. tapnext tracks → sfm (tracks are `(y, x)`: swap),
+   yolo/lang_sam masks → MoGe depth per object.
