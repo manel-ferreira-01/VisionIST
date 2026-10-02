@@ -86,12 +86,14 @@ export function Widget(props: WidgetProps) {
 
 // ------------------------------------------------------------------ upload
 
-/** Extract ``n`` evenly spaced frames from a video file in the browser and
- *  upload each as an JPEG image ref ("@token").  Wire shape ends up identical
+/** Extract ``n`` evenly spaced frames from a video file in the browser —
+ *  over the whole clip, or over ``[from, to]`` seconds — and upload each as a
+ *  JPEG image ref ("@token").  Wire shape ends up identical
  *  to an ``image_upload`` multiple field — boxes that accept image lists can
  *  consume video without any backend knowledge of video. */
 async function videoToFrameRefs(
   file: File, n: number, onProg?: (done: number) => void,
+  range: { from?: number | null; to?: number | null } = {},
 ): Promise<string[]> {
   const url = URL.createObjectURL(file);
   const v = document.createElement("video");
@@ -106,6 +108,9 @@ async function videoToFrameRefs(
     });
     const dur = isFinite(v.duration) ? v.duration : 0;
     if (!dur) throw new Error("video has no playable duration");
+    const t0 = Math.min(Math.max(0, range.from ?? 0), dur);
+    const t1 = Math.min(dur, Math.max(t0, range.to ?? dur));
+    if (t1 - t0 <= 0) throw new Error(`empty time range ${t0}–${t1} s (video is ${dur.toFixed(2)} s)`);
 
     const maxDim = 960;
     const scale = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
@@ -117,7 +122,7 @@ async function videoToFrameRefs(
 
     const out: string[] = [];
     for (let i = 0; i < n; i++) {
-      const t = dur * (i + 0.5) / n;   // midpoint sampling: robust for short clips
+      const t = t0 + (t1 - t0) * (i + 0.5) / n;   // midpoint sampling: robust for short clips
       await new Promise<void>((res) => {
         v.onseeked = () => res();
         v.currentTime = Math.min(t, Math.max(0, dur - 0.05));
@@ -140,6 +145,8 @@ function VideoFramesWidget({
   value, onChange,
 }: { value: string[]; onChange: (v: string[]) => void }) {
   const [frameCount, setFrameCount] = useState(32);
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -159,7 +166,9 @@ function VideoFramesWidget({
           setNames((m) => ({ ...m, [up.ref]: `${f.name} (${bytesShort(f.size)})` }));
         } else {
           setProg(0);
-          for (const ref of await videoToFrameRefs(f, frameCount, (d) => setProg(d))) {
+          const sec = (x: string): number | null => (x.trim() === "" || !Number.isFinite(Number(x)) ? null : Number(x));
+          const n = Math.max(2, Math.min(256, Math.round(frameCount) || 2));
+          for (const ref of await videoToFrameRefs(f, n, (d) => setProg(d), { from: sec(from), to: sec(to) })) {
             next.push(ref);
             setNames((m) => ({ ...m, [ref]: `${f.name} · frame ${next.length}` }));
           }
@@ -176,17 +185,23 @@ function VideoFramesWidget({
 
   return (
     <>
-      <div className="fld" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-        <span className="lbl" style={{ margin: 0 }}>video frames</span>
-        <select
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 6, whiteSpace: "nowrap" }}>
+        <span className="hint">video →</span>
+        <input
+          type="number" min={2} max={256} step={1}
           value={frameCount}
           onChange={(e) => setFrameCount(Number(e.target.value))}
           disabled={busy}
-          title="frames to extract from the video (evenly spaced)"
-        >
-          {[8, 16, 32, 64, 128].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <span className="hint">frames per video</span>
+          title="frames to extract from the video (evenly spaced, 2–256)"
+          style={{ width: 64 }}
+        />
+        <span className="hint">frames, from</span>
+        <input type="number" min={0} step={0.1} value={from} placeholder="0" disabled={busy}
+          onChange={(e) => setFrom(e.target.value)} style={{ width: 64 }} title="start (s); empty = video start" />
+        <span className="hint">to</span>
+        <input type="number" min={0} step={0.1} value={to} placeholder="end" disabled={busy}
+          onChange={(e) => setTo(e.target.value)} style={{ width: 64 }} title="end (s); empty = video end" />
+        <span className="hint">s</span>
       </div>
       <input
         ref={inputRef}

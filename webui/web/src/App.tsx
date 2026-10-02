@@ -1,12 +1,13 @@
-/** App shell: hash router (#/fleet, #/box/<defId>) + topbar nav.
+/** App shell: hash router (#/fleet, #/box/<defId>, #/pipeline/<id>) + topbar nav.
  *  Nothing here knows a box's request shape — the defs drive the pages. */
 import { Component, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api, ApiError } from "./api";
-import type { BoxDef } from "./api";
+import type { BoxDef, PipelineDef } from "./api";
 import { ErrorBox, Spinner } from "./ui";
 import FleetPage from "./pages/FleetPage";
 import ConsolePage from "./pages/ConsolePage";
+import PipelinePage from "./pages/PipelinePage";
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(window.location.hash);
@@ -18,10 +19,13 @@ function useHashRoute(): string {
   return hash;
 }
 
-export function routeOf(hash: string): { page: "fleet" } | { page: "box"; id: string } {
+export function routeOf(hash: string):
+  { page: "fleet" } | { page: "box"; id: string } | { page: "pipeline"; id: string } {
   const path = hash.replace(/^#/, "") || "/";
   const m = path.match(/^\/box\/([^/]+)/);
   if (m) return { page: "box", id: decodeURIComponent(m[1]) };
+  const p = path.match(/^\/pipeline\/([^/]+)/);
+  if (p) return { page: "pipeline", id: decodeURIComponent(p[1]) };
   return { page: "fleet" };
 }
 
@@ -70,6 +74,7 @@ export default function App() {
   const hash = useHashRoute();
   const route = routeOf(hash);
   const [defs, setDefs] = useState<BoxDef[] | null>(null);
+  const [pipelines, setPipelines] = useState<PipelineDef[]>([]);
   const [err, setErr] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
@@ -78,6 +83,8 @@ export default function App() {
       .catch((e) => {
         setErr(e instanceof ApiError ? { status: e.status, ...e.detail } : { message: String(e) });
       });
+    // optional: an older backend without pipelines just shows none
+    api.pipelines().then((p) => setPipelines(p.pipelines)).catch(() => setPipelines([]));
   }, []);
 
   useEffect(() => {
@@ -88,6 +95,7 @@ export default function App() {
   if (err) content = <ErrorBox title="could not load box definitions" detail={err} />;
   else if (!defs) content = <div className="empty"><Spinner label="loading definitions…" /></div>;
   else if (route.page === "box") content = <ConsolePage defs={defs} defId={route.id} />;
+  else if (route.page === "pipeline") content = <PipelinePage pipelines={pipelines} id={route.id} />;
   else content = <FleetPage defs={defs} />;
 
   return (
@@ -107,6 +115,17 @@ export default function App() {
                 title={d.name}
               >
                 {d.id}
+              </a>
+            ))}
+            {pipelines.length > 0 && <span className="navsep" title="pipelines: several boxes chained">│</span>}
+            {pipelines.map((p) => (
+              <a
+                key={`p-${p.id}`}
+                href={`#/pipeline/${p.id}`}
+                className={route.page === "pipeline" && route.id === p.id ? "active" : ""}
+                title={`${p.name} (pipeline over ${p.uses.join(" → ")})`}
+              >
+                ⛓ {p.id}
               </a>
             ))}
           </nav>

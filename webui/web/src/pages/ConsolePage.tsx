@@ -27,14 +27,18 @@ import { OverlayViz } from "../viz/OverlayViz";
 import { TracksPlayer } from "../viz/TracksPlayer";
 import type { TrackStep } from "../viz/TracksPlayer";
 import { GLBView } from "../viz/GLBView";
+import { SceneView } from "../viz/SceneView";
 
 // ----------------------------------------------------------------- helpers
+
+/** What a result block needs of a definition (a BoxDef or a PipelineDef). */
+export type ResultsDef = Pick<BoxDef, "inputs" | "results">;
 
 type View =
   | { kind: "res"; res: CallResult }
   | { kind: "err"; detail: Record<string, unknown> };
 
-interface HistItem {
+export interface HistItem {
   at: number;                 // Date.now()
   boxName: string;
   command: string | null;
@@ -56,7 +60,7 @@ function detailOf(e: unknown): Record<string, unknown> {
 
 
 /** upload ref "@tok" -> fetchable URL; pass through real URLs. */
-function fileUrl(ref: string): string {
+export function fileUrl(ref: string): string {
   return ref.startsWith("@") ? `/api/file/${ref.slice(1)}` : ref;
 }
 
@@ -588,7 +592,7 @@ function ResultView({
         {/* visualizers */}
         {concrete.map((rd, i) => (
           <div className="viz" key={`${rd.field}-${rd.visualizer}-${i}`}>
-            <ResultBlock rd={rd} def={def} res={res} baseImages={imageUrls} history={history} current={current} />
+            <ResultBlock rd={rd} def={def} fields={res.fields ?? {}} baseImages={imageUrls} history={history} current={current} />
           </div>
         ))}
 
@@ -651,17 +655,19 @@ function ResultView({
 
 // ------------------------------------------------------- def-driven block
 
-function ResultBlock({
-  rd, def, res, baseImages, history, current,
+/** One def-driven result block.  Shared with the pipeline page: it needs
+ *  only the response ``fields`` and the def's ``inputs`` / ``results``. */
+export function ResultBlock({
+  rd, def, fields, baseImages, history, current,
 }: {
   rd: BoxDef["results"][number];
-  def: BoxDef;
-  res: CallResult;
+  def: ResultsDef;
+  fields: Record<string, unknown>;
   baseImages: string[];
   history: HistItem[];
   current?: HistItem;
 }) {
-  const v = res.fields[rd.field];
+  const v = fields[rd.field];
   const title = rd.caption || rd.field;
 
   switch (rd.visualizer) {
@@ -816,6 +822,28 @@ function ResultBlock({
         </div>
       );
     }
+    case "scene": {
+      // reconstruction view; params name the keys, read from the field when
+      // it is a dict (a pipeline's assembled scene), else from the response's
+      // top-level fields (a box returning points / cameras side by side)
+      const p = (rd.params ?? {}) as Record<string, unknown>;
+      const src = v && typeof v === "object" && !Array.isArray(v) && !isRef(v)
+        ? (v as Record<string, unknown>) : fields;
+      const pick = (k: string): unknown => (typeof p[k] === "string" ? src[p[k] as string] : undefined);
+      return (
+        <SceneView
+          title={title}
+          points={pick("points")}
+          colors={pick("colors")}
+          cameras={pick("cameras")}
+          densePoints={pick("dense_points")}
+          denseColors={pick("dense_colors")}
+          denseFrames={pick("dense_frames")}
+          intrinsics={pick("intrinsics")}
+          imageSize={pick("image_size")}
+        />
+      );
+    }
     case "tracks_player":
       return <TracksSteps def={def} history={history} title={title} />;
     default:
@@ -834,7 +862,7 @@ function ResultBlock({
  *  tracks tensor (F, T, 2) index for image ``j`` is ``j + (F - M)`` clamped
  *  to F-1 — so a one-frame call still uses its last (newest) frame, and a
  *  video call (M frames in one call, F == M) maps image j to tracks frame j. */
-function TracksSteps({ def, history, title }: { def: BoxDef; history: HistItem[]; title?: string }) {
+function TracksSteps({ def, history, title }: { def: ResultsDef; history: HistItem[]; title?: string }) {
   const [steps, setSteps] = useState<TrackStep[] | null>(null);
 
   const tracksField = def.results.find((r) => r.visualizer === "tracks_player")?.inputs["tracks"];

@@ -271,3 +271,13 @@ table.data td { font-family: var(--mono); }
 .empty .big { font-size: 34px; margin-bottom: 10px; }
 
 kbd { background: var(--bg3); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; font-family: var(--mono); font-size: 11px; }
+
+/* pipeline steps (PipelinePage) */
+.steps { font-size: 12.5px; margin-bottom: 8px; }
+.steps .step { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.steps .step:last-child { border-bottom: none; }
+.steps .grow { flex: 1; min-width: 0; }
+.steps .dim { color: var(--fg-dim); white-space: nowrap; }
+.steps .bar { display: block; height: 3px; margin-top: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.steps .bar > span { display: block; height: 100%; background: var(--acc); transition: width .3s; }
+.topbar nav .navsep { color: var(--fg-dim); padding: 0 4px; user-select: none; }

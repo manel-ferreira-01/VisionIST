@@ -41,6 +41,7 @@ export interface CommandSpec {
 
 export interface SessionDef {
   key: string;
+  placement?: "section" | "parameters";
   auto_generate: boolean;
   actions: string[];
   note?: string | null;
@@ -92,6 +93,46 @@ export interface DefsPayload {
     overlay_layers: string[];
     value_kinds: string[];
   };
+}
+
+/** A pipeline: several boxes chained by server-side glue (webui/pipelines/). */
+export interface PipelineDef {
+  id: string;
+  name: string;
+  uses: string[];
+  docs?: string | null;
+  note?: string | null;
+  experimental: boolean;
+  input_mosaic?: boolean;
+  inputs: InputField[];
+  parameters: ParamDef[];
+  results: ResultDef[];
+  missing: string[];            // uses without a fleet entry (at listing time)
+}
+
+export interface JobStep {
+  name: string;
+  status: "running" | "done" | "error" | "cancelled";
+  calls: number;
+  total: number | null;
+  message: string | null;
+  duration_ms: number;
+}
+
+export interface Job {
+  id: string;
+  pipeline: string;
+  status: "queued" | "running" | "done" | "error" | "cancelled";
+  created: number;
+  started: number | null;
+  finished: number | null;
+  duration_ms: number;
+  steps: JobStep[];
+  fields: Record<string, unknown>;
+  info: Record<string, unknown>;
+  inputs: Record<string, unknown>;
+  artifacts: Artifact[];
+  error: { message: string; step: string | null; trace?: string } | null;
 }
 
 // ---------------------------------------------------------------------- fleet
@@ -223,6 +264,11 @@ export const api = {
     session_id?: string | null;
     timeout?: number;
   }) => req<CallResult>("/api/call", { method: "POST", body: JSON.stringify(b) }),
+  pipelines: () => req<{ pipelines: PipelineDef[] }>("/api/pipelines"),
+  runPipeline: (id: string, b: { data: Record<string, unknown>; parameters: Record<string, unknown>; timeout?: number }) =>
+    req<Job>(`/api/pipelines/${encodeURIComponent(id)}/run`, { method: "POST", body: JSON.stringify(b) }),
+  job: (id: string) => req<Job>(`/api/pipelines/jobs/${encodeURIComponent(id)}`),
+  cancelJob: (id: string) => req<Job>(`/api/pipelines/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
 };
 
 function fd(file: File): FormData {
