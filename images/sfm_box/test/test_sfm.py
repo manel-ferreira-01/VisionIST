@@ -11,7 +11,11 @@ affine-corrupted depth):
   3. mode A             — pixel ``tracks`` + painted ``depths`` maps +
                           ``intrinsics``, with NaN / out-of-image track
                           entries -> treated as missing entries
-  4. ``reset`` (no-op) and a malformed request (in-band ``status: error``)
+  4. the same three with ``solver: pairs`` (chained 2-frame solves +
+     one rigid global pass of the completion ping-pong)
+  5. the same three with ``solver: linear`` (no completion; near-exact on
+     noiseless data -- the default offset prior biases it slightly)
+  6. ``reset`` (no-op) and malformed requests (in-band ``status: error``)
 
 Run (server already up):
     python images/sfm_box/test/test_sfm.py
@@ -55,8 +59,9 @@ def call(stub, data, config):
     return sec, out
 
 
-def check_cameras(sec, out, gt, label):
-    print(f"[{label}] status={sec.get('status')} frames={sec.get('num_frames')}/{sec.get('num_frames_in')} "
+def check_cameras(sec, out, gt, label, max_rot=1.5, max_dir=1.0):
+    print(f"[{label}] status={sec.get('status')} solver={sec.get('solver')} "
+          f"frames={sec.get('num_frames')}/{sec.get('num_frames_in')} "
           f"points={sec.get('num_points')}/{sec.get('num_points_in')} "
           f"missing in={sec.get('missing_in', 0):.1%} kept={sec.get('missing', 0):.1%} "
           f"iters={sec.get('iterations')} runtime={sec.get('runtime', 0):.3f}s")
@@ -65,8 +70,10 @@ def check_cameras(sec, out, gt, label):
         print(f"    {k:17s} {v.dtype} {v.shape}")
     cams = [torch.from_numpy(c).float() for c in out["cameras"]]
     ev = compare_cameras(cams, [gt[i] for i in out["frame_ids"]])
-    print(f"    mean rot err {ev['mean_rot']:.3f} deg | mean dir err {ev['mean_dir']:.3f} deg")
-    assert ev["mean_rot"] < 1.5 and ev["mean_dir"] < 1.0, ev
+    rep = sec["reprojection_error"]
+    print(f"    mean rot err {ev['mean_rot']:.3f} deg | mean dir err {ev['mean_dir']:.3f} deg | "
+          f"reprojection median {rep['median']:.2e} {rep['unit']}")
+    assert ev["mean_rot"] < max_rot and ev["mean_dir"] < max_dir, ev
     F, P = len(out["frame_ids"]), len(out["point_ids"])
     assert out["cameras"].shape == (F, 3, 4) and out["points"].shape == (P, 3)
     assert out["observed"].shape == (F, P) and out["completed_matrix"].shape == (3 * F, P)
@@ -74,17 +81,30 @@ def check_cameras(sec, out, gt, label):
 
 
 def check_depth_model(sec, out, lam):
-    """Z = depth_scales * lambda + depth_offsets must be the depth the box
-    factorized (the z rows of completed_matrix) on every observed entry."""
+    """Z = depth_scales * lambda + depth_offsets must be the depth of the
+    reconstruction (the z rows of completed_matrix) on the observed entries:
+    exactly for completion / pairs (they factorize those depths), up to the
+    fit residual for linear. Gauges: completion -> o_0 = 0, smallest d ~ 1;
+    pairs -> smallest d ~ 1 (o_0 free); linear -> d_0 = 1."""
     assert sec["depth_model"] == "Z = depth_scales * lambda + depth_offsets", sec
     lam_k = np.asarray(lam)[out["frame_ids"]][:, out["point_ids"]]
     Z = out["depth_scales"][:, None] * lam_k + out["depth_offsets"][:, None]
     obs = out["observed"]
-    err = np.abs(Z - out["completed_matrix"][2::3])[obs].max()
-    print(f"    depth model: max |d*lambda + o - Z_factorized| = {err:.2e}, "
-          f"min scale {out['depth_scales'].min():.3f}, offset f0 {out['depth_offsets'][0]:.1e}")
-    assert err < 1e-4 * np.abs(Z[obs]).max(), err
-    assert abs(out["depth_scales"].min() - 1.0) < 1e-3 and abs(out["depth_offsets"][0]) < 1e-6
+    diff = np.abs(Z - out["completed_matrix"][2::3])[obs]
+    print(f"    depth model: |d*lambda + o - Z_reconstructed| max {diff.max():.2e} "
+          f"median {np.median(diff / np.abs(Z[obs])):.1e} (relative), "
+          f"scale f0 {out['depth_scales'][0]:.3f} min {out['depth_scales'].min():.3f}, "
+          f"offset f0 {out['depth_offsets'][0]:.1e}")
+    if sec["solver"] == "linear":
+        # completed_matrix is the model's R X + t: equal up to the fit residual
+        # (here the small bias of the offset prior); gauge d_0 = 1
+        assert np.median(diff / np.abs(Z[obs])) < 1e-3, diff
+        assert abs(out["depth_scales"][0] - 1.0) < 1e-6
+    else:
+        assert diff.max() < 1e-4 * np.abs(Z[obs]).max(), diff.max()
+        assert abs(out["depth_scales"].min() - 1.0) < 1e-3
+        if sec["solver"] == "completion":
+            assert abs(out["depth_offsets"][0]) < 1e-6
 
 
 def main():
@@ -96,6 +116,8 @@ def main():
     ])
     stub = pipeline_pb2_grpc.PipelineServiceStub(channel)
     reconstruct = {"sfm": {"command": "reconstruct"}}
+    pairs = {"sfm": {"command": "reconstruct", "parameters": {"solver": "pairs"}}}
+    linear = {"sfm": {"command": "reconstruct", "parameters": {"solver": "linear"}}}
 
     W, lam, gt, *_ = make_synthetic(F=10, P=300)
     F, P = lam.shape
@@ -150,8 +172,31 @@ def main():
     check_cameras(sec, out, gt, "tracks")
     expected_missing = (~np.isfinite(tracks[0::2])).sum() + 1      # + the out-of-image one
     assert round(sec["missing_in"] * F * P) == expected_missing, sec
+    assert sec["reprojection_error"]["unit"] == "px"
 
-    # --- 4. reset + in-band error ---------------------------------------------
+    # --- 4. the pairs solver ----------------------------------------------------
+    for label, data, l in [("pairs, W_mat complete", {"W_mat": W.numpy(), "lambda_mat": lam.numpy()}, lam),
+                           ("pairs, W_mat missing", {"W_mat": W.numpy(), "lambda_mat": lam_m.numpy()}, lam_m),
+                           ("pairs, tracks", {"tracks": tracks, "depths": depths, "intrinsics": K}, None)]:
+        sec, out = call(stub, data, pairs)
+        # the default offset ridge (1.0) biases this scene by ~1.5 deg
+        check_cameras(sec, out, gt, label, max_rot=2.0, max_dir=1.5)
+        if l is not None:
+            check_depth_model(sec, out, l)
+        assert sec["pairs_fallback"] == [], sec
+
+    # --- 5. the linear solver ---------------------------------------------------
+    sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam.numpy()}, linear)
+    check_cameras(sec, out, gt, "linear, W_mat complete", max_rot=0.05, max_dir=0.05)
+    check_depth_model(sec, out, lam)
+    sec, out = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam_m.numpy()}, linear)
+    check_cameras(sec, out, gt, "linear, W_mat missing", max_rot=0.05, max_dir=0.05)
+    check_depth_model(sec, out, lam_m)
+    sec, out = call(stub, {"tracks": tracks, "depths": depths, "intrinsics": K}, linear)
+    check_cameras(sec, out, gt, "linear, tracks", max_rot=0.05, max_dir=0.05)
+    assert sec["reprojection_error"]["median"] < 0.1, sec       # px (offset-prior bias only)
+
+    # --- 6. reset + in-band errors ----------------------------------------------
     sec, _ = call(stub, {}, {"sfm": {"command": "reset"}})
     print(f"[reset] {sec}")
     assert sec == {"status": "done", "action": "reset"}
@@ -159,6 +204,11 @@ def main():
     sec, _ = call(stub, {"W_mat": np.zeros((5, 10)), "lambda_mat": np.zeros((1, 10))},
                   reconstruct)
     print(f"[bad shape] {sec}")
+    assert sec["status"] == "error"
+
+    sec, _ = call(stub, {"W_mat": W.numpy(), "lambda_mat": lam.numpy()},
+                  {"sfm": {"parameters": {"solver": "magic"}}})
+    print(f"[bad solver] {sec}")
     assert sec["status"] == "error"
 
     print("PASS")

@@ -1,13 +1,23 @@
 """SfM box — depth-augmented projective structure-from-motion over the shared
 envelope, with MISSING DATA.
 
-Wraps ``projective_reconstruction.py`` (ported from
-``~/trackers/src/projective_reconstruction.py``): feature tracks + monocular
-depth -> per-frame camera poses ``[R|t]`` and the 3D point cloud. Tracks
-need not be complete: unobserved entries are filled by rank-4 matrix
-completion while the per-frame affine of monocular depth
-(``Z = d*lambda + o``) is resolved with multi-view consistency; RANSAC
-rejects outlier tracks.
+Feature tracks + monocular depth -> per-frame camera poses ``[R|t]``, the
+3D point cloud and the per-frame affine of the monocular depth
+(``Z = d*lambda + o``). Tracks need not be complete. Two solvers
+(``parameters.solver``):
+
+  * ``completion`` (default) -- ``projective_reconstruction.py`` (ported from
+    ``~/trackers/src/projective_reconstruction.py``): unobserved entries are
+    filled by rank-4 matrix completion, RANSAC rejects outlier tracks, then
+    factorization + metric upgrade.
+  * ``pairs`` -- ``pairs_reconstruction.py``: every consecutive 2-frame
+    pair reconstructed with the same pipeline, chained through the shared
+    cameras into a warm start, then ONE global pass of the completion
+    ping-pong over all frames (rigid factors, ridge on the offsets).
+  * ``linear`` -- ``linear_reconstruction.py``: rotations from 2-frame
+    solves, an exact linear solve for (t, X), then joint Levenberg-Marquardt
+    over (d, o, R, t, X) on a scale-invariant reprojection-style residual,
+    Huber IRLS. No completion, no offset anchor.
 
 Two input modes (every array is an ``np.save`` (``.npy``) blob; a
 ``torch.save`` tensor is accepted too):
@@ -18,12 +28,12 @@ Two input modes (every array is an ``np.save`` (``.npy``) blob; a
      -> ``build_depth_weighted_matrix`` builds the rays and samples the depths.
   B. ``W_mat`` (3F, P) homogeneous rays ``[x, y, 1]`` per frame
      + ``lambda_mat`` (F, P) monocular depth at each track
-     -> straight into ``run_projective_reconstruction``.
+     -> straight into the solver.
 
 An entry (frame f, point p) is MISSING when its track coordinate is NaN, it
 falls outside the depth map, or its depth sample is non-finite (e.g. invalid
-MoGe pixels). The pipeline itself drops under-observed frames/points and
-RANSAC outliers; ``frame_ids`` / ``point_ids`` map the surviving cameras and
+MoGe pixels). The solvers drop under-observed frames/points (and, for
+``completion``, RANSAC outliers); ``frame_ids`` / ``point_ids`` map the surviving cameras and
 points back to the input rows/columns.
 
 Every array output is an ``np.save`` blob declared ``numpy`` — the client's
@@ -47,6 +57,8 @@ from aux import wrap_value, unwrap_value
 import numpy as np
 import torch
 
+import linear_reconstruction as lr
+import pairs_reconstruction as pp
 import projective_reconstruction as pr
 
 
@@ -57,9 +69,10 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 _BOX_KEY = "sfm"
 _DTYPES = {"float32": torch.float32, "float64": torch.float64}
 _OFFSET_MODES = ("normalize", "estimate", "zero")
+_SOLVERS = ("completion", "pairs", "linear")
 
-# run_projective_reconstruction keyword arguments that may be passed through
-# config.sfm.parameters (value -> coercion).
+# Solver keyword arguments that may be passed through config.sfm.parameters
+# (value -> coercion), per solver.
 _RECON_PARAMS = {
     "iters": int,
     "num_scale_iters": int,
@@ -68,6 +81,24 @@ _RECON_PARAMS = {
     "offset_mode": str,
     "removal_iters": lambda v: tuple(int(i) for i in v),
     "min_obs": int,
+}
+_PAIRS_PARAMS = {
+    **_RECON_PARAMS,
+    "pair_removal_iters": lambda v: tuple(int(i) for i in v),
+    "metric": bool,
+    "offset_ridge": float,
+}
+_LINEAR_PARAMS = {
+    "iters": int,
+    "depth_weight": float,
+    "offset_prior": float,
+    "loss": lambda v: None if v in (None, "none", "None") else str(v),
+    "loss_scale": lambda v: v if v == "auto" else float(v),
+    "loss_k": float,
+    "min_obs": int,
+    "min_frame_obs": int,
+    "pair_min_points": int,
+    "seed": int,
 }
 
 # Below this many points (or 2 frames) the rank-3 factorization is meaningless.
@@ -138,67 +169,61 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
             if dtype is None:
                 return _error(f"parameters.dtype must be one of {sorted(_DTYPES)}")
 
-            W_mat, lambda_mat, mode = self._build_inputs(arrays, parameters, dtype)
+            solver = parameters.get("solver", "completion")
+            if solver not in _SOLVERS:
+                return _error(f"parameters.solver must be one of {list(_SOLVERS)}")
+
+            W_mat, lambda_mat, mode, K_px = self._build_inputs(arrays, parameters, dtype)
             F_in, P_in = lambda_mat.shape
             observed = torch.isfinite(lambda_mat)
             if F_in < _MIN_FRAMES:
                 return _error(f"Need at least {_MIN_FRAMES} frames, got {F_in}")
 
-            kwargs = {}
-            for key, cast in _RECON_PARAMS.items():
-                if key in parameters:
-                    kwargs[key] = cast(parameters[key])
-            if kwargs.get("offset_mode", "normalize") not in _OFFSET_MODES:
-                return _error(f"parameters.offset_mode must be one of {list(_OFFSET_MODES)}")
+            if solver in ("completion", "pairs"):
+                res = self._run_completion(W_mat, lambda_mat, parameters, solver)
+            else:
+                res = self._run_linear(W_mat, lambda_mat, parameters)
+            if isinstance(res, str):
+                return _error(res)
 
-            with torch.no_grad():
-                rec = pr.run_projective_reconstruction(W_mat, lambda_mat, **kwargs)
-
-            frame_ids = np.flatnonzero(rec["vf"].cpu().numpy())
-            point_ids = np.flatnonzero(rec["vp"].cpu().numpy())
+            frame_ids, point_ids = res["frame_ids"], res["point_ids"]
             min_points = int(parameters.get("min_points", _MIN_POINTS_DEFAULT))
             if len(frame_ids) < _MIN_FRAMES or len(point_ids) < min_points:
                 return _error(f"Only {len(frame_ids)} frames / {len(point_ids)} points "
                               f"survived the reconstruction (min {_MIN_FRAMES} / {min_points})")
 
-            cameras = torch.stack(rec["cam_lists"])           # (F, 3, 4)
-            mask = rec["mask_f"][0::3] > 0                    # (F, P) observed entries
+            np_dtype = np.float64 if dtype == torch.float64 else np.float32
 
-            def out(t):
-                return wrap_value(np_to_bytes(t.detach().cpu().numpy()))
-
-            # The pipeline factorizes depths (lambda + o) / s. Report them in
-            # the multiply-then-add form Z = d * lambda + o' (d = 1/s,
-            # o' = o/s): the same depths, in the documented affine model.
-            depth_scales = 1.0 / rec["current_scales"]
-            depth_offsets = rec["offsets"] / rec["current_scales"]
+            def out(a):
+                return wrap_value(np_to_bytes(np.asarray(a, dtype=np_dtype)))
 
             response_data = {
-                "cameras": out(cameras),
-                "points": out(rec["aligned_shape"].t().contiguous()),   # (P, 3)
+                "cameras": out(res["cameras"]),                 # (F', 3, 4)
+                "points": out(res["points"]),                   # (P', 3)
                 "frame_ids": wrap_value(np_to_bytes(frame_ids)),
                 "point_ids": wrap_value(np_to_bytes(point_ids)),
-                "observed": out(mask),
-                "completed_matrix": out(rec["compl_W_lam"]),
-                "depth_scales": out(depth_scales),
-                "depth_offsets": out(depth_offsets),
+                "observed": wrap_value(np_to_bytes(res["observed"])),
+                "completed_matrix": out(res["completed"]),
+                "depth_scales": out(res["d"]),
+                "depth_offsets": out(res["o"]),
             }
+            reproj = _reprojection_error(W_mat.double().numpy(), res, K_px)
 
-            info = rec["info"]
             return pipeline_pb2.Envelope(
                 config_json=json.dumps({
                     _BOX_KEY: {
                         "status": "done",
                         "runtime": time.time() - start_time,
+                        "solver": solver,
                         "input_mode": mode,
                         "num_frames_in": F_in,
                         "num_points_in": P_in,
                         "missing_in": float(1.0 - observed.float().mean()),
                         "num_frames": int(len(frame_ids)),
                         "num_points": int(len(point_ids)),
-                        "missing": float(1.0 - mask.float().mean()),
-                        "iterations": info["iterations"],
-                        "removed": info["removed"],
+                        "missing": float(1.0 - res["observed"].mean()),
+                        "reprojection_error": reproj,
+                        **res["status"],
                         "depth_model": "Z = depth_scales * lambda + depth_offsets",
                         # Declared payload encoding (generic visionist_client
                         # contract): every field is an np.save blob.
@@ -216,10 +241,67 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
             return _error(str(e))
 
     @staticmethod
+    def _run_completion(W_mat, lambda_mat, parameters, solver="completion"):
+        table = _RECON_PARAMS if solver == "completion" else _PAIRS_PARAMS
+        kwargs = {key: cast(parameters[key])
+                  for key, cast in table.items() if key in parameters}
+        if kwargs.get("offset_mode", "normalize") not in _OFFSET_MODES:
+            return f"parameters.offset_mode must be one of {list(_OFFSET_MODES)}"
+        run = (pr.run_projective_reconstruction if solver == "completion"
+               else pp.run_pairs_reconstruction)
+        with torch.no_grad():
+            rec = run(W_mat, lambda_mat, **kwargs)
+        # The pipeline factorizes depths (lambda + o) / s. Report them in
+        # the multiply-then-add form Z = d * lambda + o' (d = 1/s,
+        # o' = o/s): the same depths, in the documented affine model.
+        s = rec["current_scales"]
+        return {
+            "frame_ids": np.flatnonzero(rec["vf"].cpu().numpy()),
+            "point_ids": np.flatnonzero(rec["vp"].cpu().numpy()),
+            "cameras": torch.stack(rec["cam_lists"]).cpu().numpy(),
+            "points": rec["aligned_shape"].t().cpu().numpy(),
+            "observed": (rec["mask_f"][0::3] > 0).cpu().numpy(),
+            "completed": rec["compl_W_lam"].cpu().numpy(),
+            "d": (1.0 / s).cpu().numpy(),
+            "o": (rec["offsets"] / s).cpu().numpy(),
+            "status": {"iterations": rec["info"]["iterations"],
+                       "removed": rec["info"]["removed"],
+                       **({"pairs_fallback": [p["frames"] for p in rec["info"]["pairs"]
+                                              if p.get("method") != "pair"]}
+                          if solver == "pairs" else {})},
+        }
+
+    @staticmethod
+    def _run_linear(W_mat, lambda_mat, parameters):
+        kwargs = {key: cast(parameters[key])
+                  for key, cast in _LINEAR_PARAMS.items() if key in parameters}
+        if kwargs.get("loss", "huber") not in ("huber", None):
+            return "parameters.loss must be 'huber' or null"
+        rec = lr.run_linear_reconstruction(W_mat.double().numpy(),
+                                           lambda_mat.double().numpy(), **kwargs)
+        info = rec["info"]
+        return {
+            "frame_ids": np.flatnonzero(rec["vf"]),
+            "point_ids": np.flatnonzero(rec["vp"]),
+            "cameras": rec["cameras"],
+            "points": rec["points"],
+            "observed": rec["observed"],
+            "completed": rec["completed"],
+            "d": rec["d"],
+            "o": rec["o"],
+            "status": {"iterations": info["iterations"],
+                       "converged": info["converged"],
+                       "outliers": info["outliers"],
+                       "pairs_fallback": [p["frames"] for p in info["pairs"]
+                                          if p["method"] != "pair"]},
+        }
+
+    @staticmethod
     def _build_inputs(arrays, parameters, dtype):
         """Validate the input arrays and return ``(W_mat (3F,P),
-        lambda_mat (F,P), mode)`` with NaN in ``lambda_mat`` wherever an
-        entry is missing (the pipeline's missing-data mask)."""
+        lambda_mat (F,P), mode, K)`` with NaN in ``lambda_mat`` wherever an
+        entry is missing (the pipeline's missing-data mask); ``K`` is the
+        pixel camera matrix ((3,3) or (F,3,3); None in mode B)."""
         has_a = {"tracks", "depths", "intrinsics"} <= arrays.keys()
         has_b = {"W_mat", "lambda_mat"} <= arrays.keys()
 
@@ -232,7 +314,7 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
             if lam.shape != (F, W.shape[1]):
                 raise ValueError(f"data.lambda_mat must be (F, P) = {(F, W.shape[1])}, "
                                  f"got {lam.shape}")
-            mode = "W_mat"
+            mode, K = "W_mat", None
 
         elif has_a:
             tracks = np.asarray(arrays["tracks"], dtype=np.float64)
@@ -273,7 +355,32 @@ class PipelineService(pipeline_pb2_grpc.PipelineServiceServicer):
         bad = ~(np.isfinite(lam) & np.isfinite(W.reshape(F, 3, -1)).all(1))
         lam = lam.copy(); lam[bad] = np.nan
         W = np.nan_to_num(W, nan=0.0, posinf=0.0, neginf=0.0)   # masked out via lam
-        return torch.from_numpy(W).to(dtype), torch.from_numpy(lam).to(dtype), mode
+        return torch.from_numpy(W).to(dtype), torch.from_numpy(lam).to(dtype), mode, K
+
+
+def _reprojection_error(W, res, K):
+    """Image error of the reconstruction on the observed entries: project
+    ``points`` with ``cameras`` and compare with the input rays. In pixels
+    when the intrinsics are known (mode A), else in normalized units."""
+    fids, pids = res["frame_ids"], res["point_ids"]
+    cams = np.asarray(res["cameras"], dtype=np.float64)
+    X = np.asarray(res["points"], dtype=np.float64).T                  # (3, P')
+    proj = cams[:, :, :3] @ X[None] + cams[:, :, 3:]                    # (F', 3, P')
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xy = proj[:, :2] / proj[:, 2:]
+    w = W.reshape(-1, 3, W.shape[1])[fids][:, :2][:, :, pids]          # (F', 2, P')
+    diff = xy - w
+    unit = "normalized"
+    if K is not None:
+        Kf = np.broadcast_to(K, (len(W) // 3, 3, 3))[fids]
+        diff = diff * np.stack([Kf[:, 0, 0], Kf[:, 1, 1]], 1)[:, :, None]
+        unit = "px"
+    err = np.linalg.norm(diff, axis=1)[res["observed"]]
+    err = err[np.isfinite(err)]
+    if err.size == 0:
+        return {"unit": unit}
+    return {"median": float(np.median(err)), "mean": float(err.mean()),
+            "p90": float(np.percentile(err, 90)), "unit": unit}
 
 
 def get_port():
