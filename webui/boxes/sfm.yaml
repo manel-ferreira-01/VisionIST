@@ -1,0 +1,91 @@
+# SfM box — depth-augmented structure-from-motion with missing data.
+# Authoritative request shape: ../../images/sfm_box/README.md
+id: sfm
+name: "SfM · cameras + points from tracks and depth"
+box_key: sfm
+docs: ../../images/sfm_box/README.md
+input_mosaic: false
+note: >
+  Every input is an np.save (.npy) blob. Mode A: tracks (2F, P) pixel x/y
+  rows, NaN = unseen + depths (F, H, W) + intrinsics (3, 3). Mode B: W_mat
+  (3F, P) rays + lambda_mat (F, P). CPU-only and stateless. To go straight
+  from a video, use the sfm_video pipeline (lightglue + MoGe + this box).
+
+inputs:
+  - field: tracks
+    widget: file_upload
+    kind: bb
+    placeholder: "mode A: (2F, P) .npy — pixel x/y rows per frame, NaN where unseen"
+  - field: depths
+    widget: file_upload
+    kind: bb
+    placeholder: "mode A: (F, H, W) .npy — monocular depth maps"
+  - field: intrinsics
+    widget: file_upload
+    kind: bb
+    placeholder: "mode A: (3, 3) or (F, 3, 3) .npy — camera matrix"
+  - field: W_mat
+    widget: file_upload
+    kind: bb
+    placeholder: "mode B: (3F, P) .npy — homogeneous rays"
+  - field: lambda_mat
+    widget: file_upload
+    kind: bb
+    placeholder: "mode B: (F, P) .npy — depth per track, NaN = missing"
+
+command:
+  values: [reconstruct, reset]
+  default: reconstruct
+
+parameters:
+  - key: solver
+    widget: select
+    values: [linear, pairs, completion]
+    default: linear
+    placeholder: "linear: 2-frame rotations + global LM (best on partial tracks) · pairs · completion (box default)"
+  - key: intrinsics_normalized
+    widget: number
+    min: 0
+    max: 1
+    step: 1
+    default: 0
+    placeholder: "1 = MoGe-style normalized intrinsics (scaled by the depth-map size)"
+  - key: iters
+    widget: number
+    min: 1
+    max: 1000
+    step: 10
+    placeholder: "unset = 100 (completion iterations / LM iterations)"
+  - key: offset_mode
+    widget: select
+    values: [normalize, estimate, zero]
+    placeholder: "unset = solver default"
+  - key: dtype
+    widget: select
+    values: [float32, float64]
+    placeholder: "unset = float32"
+  - key: min_points
+    widget: number
+    min: 3
+    max: 10000
+    step: 1
+    placeholder: "unset = 8 (error out below this)"
+
+results:
+  - field: points
+    visualizer: scene
+    caption: "reconstruction — points + camera frustums (orbit/zoom; first camera = origin)"
+    params:
+      points: points
+      cameras: cameras
+  - field: depth_scales
+    visualizer: tensor
+    caption: "per-frame depth scale d (Z = d·λ + o)"
+  - field: depth_offsets
+    visualizer: tensor
+    caption: "per-frame depth offset o"
+  - field: observed
+    visualizer: field_map
+    caption: "observed entries (frames × points) — the rest were completed"
+  - field: "*"
+    visualizer: json

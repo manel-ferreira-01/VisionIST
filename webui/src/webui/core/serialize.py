@@ -129,7 +129,7 @@ def _ser_tensor(v, store: ArtifactStore) -> dict:
     if arr is not None:
         dname = arr.dtype.name
         if dname in _NUMPY_OK:
-            if numel <= MAX_INLINE_ELEMENTS:
+            if numel <= MAX_INLINE_ELEMENTS and _finite(arr):
                 return _array_inline(None, dname, shape, arr.tolist(), arr.dtype.itemsize)
             try:
                 return _buffer_ref(store, arr.tobytes(), dname, shape)
@@ -145,11 +145,18 @@ def _ser_tensor(v, store: ArtifactStore) -> dict:
     return _pickle_ref(store, v, "tensor that could not be array-ified")
 
 
+def _finite(arr) -> bool:
+    """False for float arrays holding NaN/Inf: JSON has no NaN, so those go
+    out as typed buffers (raw IEEE bytes keep them) instead of inline."""
+    import numpy as np
+    return arr.dtype.kind != "f" or bool(np.isfinite(arr).all())
+
+
 def _ser_ndarray(v, store: ArtifactStore) -> dict:
     dname = v.dtype.name
     shape = list(v.shape)
     if dname in _NUMPY_OK:
-        if v.size <= MAX_INLINE_ELEMENTS:
+        if v.size <= MAX_INLINE_ELEMENTS and _finite(v):
             return _array_inline(None, dname, shape, v.tolist(), v.dtype.itemsize)   # bools stay bools
         return _buffer_ref(store, v.tobytes(), dname, shape)
     if dname == "object":
@@ -220,6 +227,11 @@ def _extract_status(config: Any) -> dict:
     return out
 
 
+def serialize_value(v: Any, store: ArtifactStore) -> Any:
+    """One value, same rules as a box field (pipelines emit through this)."""
+    return _ser(v, store)
+
+
 def serialize_result(res: Any, store: ArtifactStore) -> dict:
     """``res`` is a ``visionist_client.Result``.  Returns a JSON-safe dict plus
     the artifacts it referenced."""
@@ -237,5 +249,5 @@ def serialize_result(res: Any, store: ArtifactStore) -> dict:
     }
 
 
-__all__ = ["serialize_result", "sniff_mime",
+__all__ = ["serialize_result", "serialize_value", "sniff_mime",
            "MAX_INLINE_ELEMENTS", "MAX_LIST_ITEMS", "MAX_DICT_KEYS"]

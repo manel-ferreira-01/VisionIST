@@ -130,6 +130,7 @@ services:
       - vggt
       - moge
       - yolo
+      - lightglue
       - unimatch
       - sfm
     restart: unless-stopped

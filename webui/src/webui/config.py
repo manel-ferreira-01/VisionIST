@@ -30,6 +30,8 @@ class AppEnv:
     artifact_ttl: float
     max_artifact_bytes: int
     max_upload_bytes: int
+    pipelines_dir: Path | None = None    # pipeline modules (None: <project>/pipelines)
+    pipeline_workers: int = 2            # concurrent pipeline jobs
 
 
 def read_env() -> AppEnv:
@@ -43,6 +45,8 @@ def read_env() -> AppEnv:
         artifact_ttl=_float("WEBUI_ARTIFACT_TTL", 3600.0),
         max_artifact_bytes=_int("WEBUI_MAX_ARTIFACT_BYTES", 2_000_000_000),
         max_upload_bytes=_int("WEBUI_MAX_UPLOAD_BYTES", 64 * 1024 * 1024),
+        pipelines_dir=Path(os.environ.get("WEBUI_PIPELINES_DIR", str(project / "pipelines"))),
+        pipeline_workers=_int("WEBUI_PIPELINE_WORKERS", 2),
     )
 
 

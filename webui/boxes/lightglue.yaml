@@ -1,0 +1,75 @@
+# LightGlue box — SuperPoint / DISK features + LightGlue matching.
+# Authoritative request shape: ../../images/lightglue_box/README.md
+id: lightglue
+name: "LightGlue · feature matching"
+box_key: lightglue
+docs: ../../images/lightglue_box/README.md
+note: >
+  match: 1 image → its features; exactly 2 → features + the matcher's
+  match indices (stateless). stream: one new frame per call, matched against
+  the last `window` frames of this session (matches_1..window). Turning
+  stream matches into tracks is client-side work — see the sfm_video
+  pipeline (visionist_client.track_stream).
+
+inputs:
+  - field: images
+    widget: image_upload
+    kind: bb
+    multiple: true
+    required: true
+    constraint: "match: 1 or 2 images (more is an error) · stream: one frame per call"
+
+command:
+  values: [match, stream, reset, list]
+  default: match
+
+parameters:
+  - key: feature_extractor
+    widget: select
+    values: [SUPERPOINT, DISK]
+    default: SUPERPOINT
+  - key: max_keypoints
+    widget: number
+    min: 64
+    max: 8192
+    step: 64
+    default: 1024
+  - key: filter_threshold
+    widget: slider
+    min: 0
+    max: 1
+    step: 0.05
+    placeholder: "unset = LightGlue's own (0.1) — higher = fewer, stronger matches"
+  - key: window
+    widget: slider
+    min: 1
+    max: 16
+    step: 1
+    default: 3
+    placeholder: "stream only: stored frames the new frame is matched against"
+  - key: device
+    widget: select
+    values: [cuda, cpu]
+    placeholder: "auto (CUDA if visible)"
+
+session:
+  key: session_id
+  placement: parameters        # the box reads parameters.session_id
+  auto_generate: true
+  actions: [reset, list]
+  note: >
+    stream session (sliding window of stored features). A fresh id per page
+    load; reaped after LIGHTGLUE_SESSION_TTL idle seconds (default 1800).
+
+results:
+  - field: keypoints
+    visualizer: tensor
+    caption: "(images, N, 2) keypoints (x, y), padded to a common N"
+  - field: matches
+    visualizer: tensor
+    caption: "(K, 2) match indices — col 0 → image A, col 1 → image B"
+  - field: confidence
+    visualizer: tensor
+    caption: "(K,) per-match confidence"
+  - field: "*"
+    visualizer: json

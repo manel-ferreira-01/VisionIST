@@ -16,7 +16,7 @@ def reg():
 
 
 EXPECTED_IDS = {"clip", "tapnext", "lang_sam", "sbert", "vggt", "moge", "yolo",
-                "unimatch"}
+                "unimatch", "lightglue", "sfm"}
 
 
 def test_out_of_scope_boxes_are_absent(reg):
@@ -227,3 +227,33 @@ def test_to_list_json_serializable(reg):
     import json
     payload = json.dumps(reg.to_list())
     assert "lang_sam" in payload
+
+
+def test_lightglue_session_lives_in_parameters(reg):
+    d = reg.get("lightglue")
+    assert d.session is not None and d.session.placement == "parameters"
+    assert d.command.values == ["match", "stream", "reset", "list"]
+
+
+def test_sfm_scene_reads_top_level_fields(reg):
+    d = reg.get("sfm")
+    scene = next(r for r in d.results if r.visualizer == "scene")
+    assert scene.params == {"points": "points", "cameras": "cameras"}
+
+
+def test_bad_pipeline_module_rejected(tmp_path, reg):
+    from webui.core import PipelineError, load_pipelines
+    (tmp_path / "p.py").write_text(
+        "DEF = {'id': 'p', 'name': 'p', 'uses': ['no_such_box']}\n"
+        "def run(ctx, data, params): pass\n")
+    with pytest.raises(PipelineError, match="no_such_box"):
+        load_pipelines(tmp_path, reg)
+    (tmp_path / "p.py").write_text("DEF = {'id': 'p'}\n")
+    with pytest.raises(PipelineError, match="DEF dict and a run"):
+        load_pipelines(tmp_path, reg)
+
+
+def test_shipped_pipelines_load(reg):
+    from webui.core import load_pipelines
+    pipes = load_pipelines(pathlib.Path(__file__).resolve().parents[1] / "pipelines", reg)
+    assert [p.defn.id for p in pipes] == ["sfm_video"]

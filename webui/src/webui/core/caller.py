@@ -221,7 +221,10 @@ def build_call(defn: BoxDef, req: CallRequest, store: ArtifactStore) -> CallSpec
         body["parameters"] = params
     body.update(sec)
     if session_id is not None:
-        body[defn.session.key if defn.session else "session_id"] = session_id
+        if defn.session.placement == "parameters":
+            body.setdefault("parameters", {})[defn.session.key] = session_id
+        else:
+            body[defn.session.key] = session_id
 
     if defn.flat_config:
         config = body

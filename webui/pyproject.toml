@@ -29,6 +29,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     # zstandard: the zstd_pickle codec needs it in the backend venv too
     "zstandard>=0.18",
+    # pipelines (webui/pipelines/*.py): array glue + JPEG decode for colours
+    "numpy>=1.24",
+    "pillow>=9",
 ]
 
 [project.optional-dependencies]

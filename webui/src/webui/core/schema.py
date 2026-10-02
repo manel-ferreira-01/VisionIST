@@ -45,6 +45,9 @@ VISUALIZERS: frozenset[str] = frozenset({
     "glb",            # glTF binary 3D model (three.js)
     "video",          # video file artifact (mp4/…) -> native <video controls>
     "points",         # per-item point cloud (depth+intrinsics or (…, 3)) → THREE.Points, no 3D file format
+    "scene",          # reconstruction: points (+ colors) + camera [R|t] frustums + optional
+                       # dense cloud — keys named by params, read from the field (a dict)
+                       # or from the response's top-level fields
     "tracks_player",  # frames + tracks/visibles animation
     "download",       # raw file download
 })
@@ -151,6 +154,9 @@ class SessionDef(_Def):
     """
 
     key: str = "session_id"
+    placement: Literal["section", "parameters"] = "section"   # where the box reads the key:
+                                                             # next to command (tapnext) or
+                                                             # inside parameters (lightglue)
     auto_generate: bool = False
     actions: list[str] = Field(default_factory=list)   # e.g. ["reset", "list"]
     note: Optional[str] = None
@@ -265,8 +271,48 @@ class BoxDef(_Def):
         return self
 
 
+# --------------------------------------------------------------------------
+# Pipelines: several boxes chained by server-side glue (``webui/pipelines/``)
+# --------------------------------------------------------------------------
+
+class PipelineDef(_Def):
+    """A pipeline as the webui sees it: the same form-in / visualizers-out
+    contract as a :class:`BoxDef`, but the call is a Python ``run()`` that
+    drives several boxes (``uses``: def ids, resolved through the fleet).
+
+    The glue lives in the pipeline module, next to this definition — the
+    core still names no box."""
+
+    id: str
+    name: str
+    uses: list[str] = Field(default_factory=list)   # box def ids the run calls
+    docs: Optional[str] = None
+    note: Optional[str] = None
+    experimental: bool = False
+    input_mosaic: bool = True
+
+    inputs: list[InputField] = Field(default_factory=list)
+    parameters: list[ParamDef] = Field(default_factory=list)
+    results: list[ResultDef] = Field(default_factory=list)
+
+    def input_fields(self) -> dict[str, InputField]:
+        return {f.field: f for f in self.inputs}
+
+    @model_validator(mode="after")
+    def _check(self):
+        seen: set[str] = set()
+        for f in self.inputs:
+            if f.field in seen:
+                raise ValueError(f"duplicate input field {f.field!r}")
+            seen.add(f.field)
+        keys = [p.key for p in self.parameters]
+        if len(keys) != len(set(keys)):
+            raise ValueError(f"duplicate parameter keys: {keys}")
+        return self
+
+
 __all__ = [
-    "BoxDef", "InputField", "ParamDef", "ActionDef", "CommandSpec",
+    "BoxDef", "PipelineDef", "InputField", "ParamDef", "ActionDef", "CommandSpec",
     "SessionDef", "LayerDef", "ResultDef",
     "WIDGETS", "VISUALIZERS", "OVERLAY_LAYERS", "VALUE_KINDS",
 ]

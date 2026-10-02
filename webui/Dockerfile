@@ -39,6 +39,7 @@ COPY webui/pyproject.toml                 webui/
 COPY webui/README.md                      webui/
 COPY webui/src/                           webui/src/
 COPY webui/boxes/                         webui/boxes/
+COPY webui/pipelines/                     webui/pipelines/
 COPY webui/web/dist/                      webui/web/dist/
 
 # Install the local client (satisfies webui's visionist-client dep, and keeps
