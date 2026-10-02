@@ -191,13 +191,16 @@ def projective_factorization_fast(A: torch.Tensor):
 # 3. Missing-data pieces (from src/mat_compl.py, src/ortho_factorization.py)
 # =============================================================================
 
-def _update_affine_ortho(x, y, lam, M, mask=None, eps=1e-6, clamp_pos=True):
+def _update_affine_ortho(x, y, lam, M, mask=None, eps=1e-6, clamp_pos=True, offset_ridge=0.0):
     """
     Per-frame affine depth fit (closed form, 2x2 normal equations) over the
     observed entries only.
 
     x, y : (F, P) normalized image coords.   lam : (F, P) depths.
     M    : (3F, P) current low-rank model.    mask : (F, P) bool, True where observed.
+    offset_ridge : ridge on the offsets, as a fraction of the data's own
+                   information on them (0 = none): holds them near 0 where the
+                   data barely constrains them (small parallax).
     Returns d (F,) slopes, s (F,) offsets.
     """
     F, P = lam.shape
@@ -219,7 +222,7 @@ def _update_affine_ortho(x, y, lam, M, mask=None, eps=1e-6, clamp_pos=True):
     X2Y2 = x_**2 + y_**2            # (F, P)
 
     a11 = (m * L * L * X2Y2).sum(1) + eps
-    a22 = (m * X2Y2).sum(1) + eps
+    a22 = (m * X2Y2).sum(1) * (1.0 + offset_ridge) + eps
     a12 = (m * L * X2Y2).sum(1)
 
     b1 = (m * (L * x_ * Mx_ + L * y_ * My_)).sum(1)
@@ -279,7 +282,8 @@ def ransac_subspace(W_filled, mask_w, rank=4, n_iters=100,
 
 def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ridge=1e-10,
                               offset_mode="normalize", removal_iters=(10, 20, 30, 40),
-                              min_obs=2, generator=None):
+                              min_obs=2, generator=None, U_init=None, o_init=None,
+                              affine_start=40, metric=False, offset_ridge=0.0):
     """
     Jointly estimates the per-frame depth offset and completes missing
     entries, such that (lam + o) * tracks is rank-4 (ALS completion;
@@ -296,6 +300,18 @@ def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ri
         offset_mode : "estimate" (raw o) | "normalize" (o - o[0], default) | "zero"
         min_obs     : drop points/frames observed fewer times after a removal
         generator   : torch.Generator for the RANSAC sampling
+        U_init      : (3F, rank) warm start of the camera factor (e.g. stacked
+                      [R_f | t_f] / d_f); None = SVD of the column-mean fill
+        o_init      : (F,) warm start of the offsets (kept until the affine
+                      fit starts)
+        affine_start: the affine fit runs for iterations > affine_start
+                      (original: 40; with a warm start, -1 = from the start)
+        metric      : keep the factors rigid (needs a metric warm start,
+                      rank 4): every camera block U_f = s_f [R_f | t_f]
+                      (3x3 part projected on the nearest scaled rotation)
+                      and every point V_p = [X_p, 1]
+        offset_ridge: ridge of the affine fit on the offsets (see
+                      _update_affine_ortho; 0 = original)
 
     Returns:
         o        : (F,)      offset per frame (0 for removed frames)
@@ -325,14 +341,25 @@ def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ri
     eye_r = ridge * torch.eye(rank, device=device, dtype=dtype)
     removed = []
 
-    # --- SVD initialisation (missing entries filled with the column mean) ---
-    lam3_w = lam_w.repeat_interleave(3, dim=0)
-    W_init = lam3_w * tracks_w
-    col_mean = torch.nanmean(W_init, dim=0)
-    W_filled = torch.where(mask_w, W_init, col_mean.unsqueeze(0).expand_as(W_init))
-    Ui, Si, Vhi = torch.linalg.svd(W_filled, full_matrices=False)
-    U = (Ui[:, :rank] * Si[:rank].sqrt()).contiguous()
-    V = (Vhi[:rank].T * Si[:rank].sqrt()).contiguous()
+    if U_init is None:
+        # --- SVD initialisation (missing entries filled with the column mean) ---
+        lam3_w = lam_w.repeat_interleave(3, dim=0)
+        W_init = lam3_w * tracks_w
+        col_mean = torch.nanmean(W_init, dim=0)
+        W_filled = torch.where(mask_w, W_init, col_mean.unsqueeze(0).expand_as(W_init))
+        Ui, Si, Vhi = torch.linalg.svd(W_filled, full_matrices=False)
+        U = (Ui[:, :rank] * Si[:rank].sqrt()).contiguous()
+        V = (Vhi[:rank].T * Si[:rank].sqrt()).contiguous()
+    else:
+        # --- warm start: given cameras (+ offsets), points from one ALS V step ---
+        U = U_init.to(dtype).clone()
+        if o_init is not None:
+            o = o_init.to(dtype).clone()
+        W_init = (lam_w + o[:, None]).repeat_interleave(3, dim=0) * tracks_w
+        mask_f0 = mask_w.float()
+        A_V = torch.einsum('ij,ik,il->jkl', mask_f0, U, U) + eye_r
+        b_V = (mask_f0 * torch.nan_to_num(W_init)).T @ U
+        V = torch.linalg.solve(A_V, b_V.unsqueeze(-1)).squeeze(-1)
     M = U @ V.T
 
     prev_rho = float('inf')
@@ -402,23 +429,34 @@ def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ri
         b_U = (mask_f * W_filled) @ V
         U = torch.linalg.solve(A_U, b_U.unsqueeze(-1)).squeeze(-1)
 
+        if metric:
+            U = _project_scaled_rotations(U)
+
         # ---- ALS: update V ----
-        A_V = torch.einsum('ij,ik,il->jkl', mask_f, U, U) + eye_r
-        b_V = (mask_f * W_filled).T @ U
-        V = torch.linalg.solve(A_V, b_V.unsqueeze(-1)).squeeze(-1)
+        if metric:                                   # V_p = [X_p, 1]: solve X_p only
+            U3, u4 = U[:, :3], U[:, 3]
+            A_V = torch.einsum('ij,ik,il->jkl', mask_f, U3, U3) + eye_r[:3, :3]
+            b_V = (mask_f * (W_filled - u4[:, None])).T @ U3
+            X = torch.linalg.solve(A_V, b_V.unsqueeze(-1)).squeeze(-1)
+            V = torch.cat([X, torch.ones_like(X[:, :1])], dim=1)
+        else:
+            A_V = torch.einsum('ij,ik,il->jkl', mask_f, U, U) + eye_r
+            b_V = (mask_f * W_filled).T @ U
+            V = torch.linalg.solve(A_V, b_V.unsqueeze(-1)).squeeze(-1)
 
         M = U @ V.T
 
         # ---- Affine calibration (offsets only; scales come later) ----
-        if it > 40:
+        if it > affine_start:
             d, o = _update_affine_ortho(
-                tracks_w[0::3], tracks_w[1::3], lam_w, M, mask=mask_w[0::3]
+                tracks_w[0::3], tracks_w[1::3], lam_w, M, mask=mask_w[0::3],
+                offset_ridge=offset_ridge,
             )
             if offset_mode == "normalize":
                 o = o - o[0]
             elif offset_mode == "zero":
                 o = torch.zeros_like(o)
-        else:
+        elif U_init is None:
             o = torch.zeros_like(o)
 
         d = torch.ones_like(d)
@@ -433,7 +471,7 @@ def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ri
 
         rho = (W_scaled - M)[mask_w].norm().item()
 
-        if it > 40 and abs(prev_rho - rho) < tol and (
+        if it > max(affine_start, 0) and abs(prev_rho - rho) < tol and (
                 len(offset_history) < 2
                 or torch.allclose(offset_history[-1], offset_history[-2], atol=tol)):
             break
@@ -463,8 +501,22 @@ def calibrate_with_completion(tracks, lam, mask, rank=4, iters=100, tol=1e-4, ri
 
     o_full[active_frames] = o
 
-    info = {"iterations": it + 1, "removed": removed}
+    info = {"iterations": it + 1, "removed": removed, "U": U, "V": V}
     return o_full, W_final, M_full, mask_out.float(), active_frames, active_cols, info
+
+
+def _project_scaled_rotations(U):
+    """(3F, 4) camera factor -> every 3x3 block replaced by the nearest
+    scaled rotation s R (s = mean singular value, det R = +1); t kept."""
+    F = U.shape[0] // 3
+    A = U[:, :3].reshape(F, 3, 3)
+    Uu, S, Vh = torch.linalg.svd(A)
+    D = torch.ones(F, 3, dtype=U.dtype, device=U.device)
+    D[:, 2] = torch.sign(torch.linalg.det(Uu @ Vh))
+    R = Uu @ (D[:, :, None] * Vh)
+    out = U.clone()
+    out[:, :3] = (S.mean(1)[:, None, None] * R).reshape(3 * F, 3)
+    return out
 
 
 def check_visibility(mask_F, rank=4):
@@ -522,6 +574,10 @@ def run_projective_reconstruction(
     offset_mode: str = "normalize",
     removal_iters: tuple = (10, 20, 30, 40),
     min_obs: int = 2,
+    init=None,
+    affine_start: int = 40,
+    metric: bool = False,
+    offset_ridge: float = 0.0,
 ) -> dict:
     """
     Full projective reconstruction pipeline: filter visibility, complete the
@@ -538,6 +594,13 @@ def run_projective_reconstruction(
         offset_mode:      "estimate", "normalize" (default), or "zero".
         removal_iters:    Completion iterations at which RANSAC rejects tracks.
         min_obs:          Minimum observations per point/frame after a removal.
+        init:             Optional warm start: callable(tracks_f, lam_f, mask_f)
+                          -> (U_init (3F, rank), o_init (F,)) on the
+                          visibility-filtered matrices (see pairs_reconstruction).
+        affine_start:     Iteration after which the affine fit runs (40; -1
+                          with a warm start).
+        metric:           Keep the completion factors rigid (warm start only).
+        offset_ridge:     Ridge of the affine fit on the offsets (0 = original).
 
     Returns dict with keys:
         cam_lists         list of (3, 4) [R | t], first surviving camera = reference
@@ -571,10 +634,15 @@ def run_projective_reconstruction(
         raise ValueError(f"not enough co-visible data after visibility filtering "
                          f"({tracks_f.shape[0] // 3} frames, {tracks_f.shape[1]} points)")
 
-    # --- Matrix completion ---
+    # --- Matrix completion (optionally warm-started) ---
+    U_init = o_init = None
+    if init is not None:
+        U_init, o_init = init(tracks_f, lam_f, mask_f)
     o, compl_W_lam, M, mask_f, surviving_frames, surviving_cols, info = calibrate_with_completion(
         tracks_f, lam_f, mask_f, rank=rank, iters=iters, offset_mode=offset_mode,
-        removal_iters=removal_iters, min_obs=min_obs, generator=generator)
+        removal_iters=removal_iters, min_obs=min_obs, generator=generator,
+        U_init=U_init, o_init=o_init, affine_start=affine_start, metric=metric,
+        offset_ridge=offset_ridge)
 
     # --- Align vf/vp to surviving frames/cols ---
     vp_indices = vp.nonzero(as_tuple=True)[0]
